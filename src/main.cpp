@@ -182,10 +182,12 @@ int main() {
 
     char Recv_msv[100];                  /* buffer for command from port */
     
+    srv.accept(&clt_sock, &clt_addr);
+            printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+    
     while(1){
-      srv.accept(&clt_sock, &clt_addr);
-                printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-        
+      // srv.accept(&clt_sock, &clt_addr);
+      //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
       clt_sock.recv(Recv_msv, 100);
                 printf("Recv recv_msv %s \n", Recv_msv);
       
