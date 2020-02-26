@@ -49,9 +49,11 @@ Thread sockSendThread;
 TCPServer srv;
 TCPSocket clt_sock;
 SocketAddress clt_addr;
+EthernetInterface eth;
 
 EventFlags eventFlags;
 
+bool flag1=true;
 const uint32_t sizeMainBuffer=1024;
 //uint32_t sizeMainBuffer=10;
 
@@ -128,7 +130,7 @@ void call_spiThread2(){
 }
 
 void ethernetInterfaceInit(){
-    EthernetInterface eth;
+    //EthernetInterface eth;
             printf("\n======== step EthernetInterfaceFunction() ======================\n");fflush(stdout);
     int ret;
     ret = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
@@ -145,7 +147,7 @@ void ethernetInterfaceInit(){
 
 void getCommandFromPort(char* ptr_recv_msv){
   int32_t valueFromCommand = ptr_recv_msv[0]-0x30;
-
+/* обнулить входящий массив после того как он отработает*/
   switch (valueFromCommand){
     case 2:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
@@ -156,6 +158,15 @@ void getCommandFromPort(char* ptr_recv_msv){
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
         printf("\n onOffLed() function has to work!\n");fflush(stdout);
         onOffLed();
+      break;
+    case 5:
+        printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
+        printf("\n port close()\n");fflush(stdout);
+        // srv.close();
+        // //eth.
+        // eth.disconnect();
+        // flag1=false;
+        // wait(120); 
       break;
   }
 }
@@ -181,10 +192,10 @@ int main() {
     ethernetInterfaceInit();
 
     char Recv_msv[100];                  /* buffer for command from port */
-    
+    //while(1){
     srv.accept(&clt_sock, &clt_addr);
             printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-    
+    // flag1=true;
     while(1){
       // srv.accept(&clt_sock, &clt_addr);
       //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
@@ -193,7 +204,7 @@ int main() {
       
       getCommandFromPort(&Recv_msv[0]);
     }
-
+    //}
 delete[] MainBuffer;
 }
 
