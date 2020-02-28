@@ -1,5 +1,6 @@
 /*
 743 spi master eth 3v4
+test vector
 */
 
 #include "mbed.h"
