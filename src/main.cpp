@@ -89,6 +89,7 @@ void call_sockSendThread(){                                     /*send in port M
         //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
         // }
         printf("MainBuffer was send, VectorBytes.size()=%u \n", VectorBytes.size());fflush(stdout);
+        //VectorBytes.clear();
     }
 }
 
