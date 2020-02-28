@@ -61,8 +61,11 @@ const uint32_t sizeMainBuffer=1024;
 uint32_t counterDRDY=0;
 
 int32_t counterFLAG=0;
-char* MainBuffer = new char[sizeMainBuffer](); //work
+//char* MainBuffer = new char[sizeMainBuffer](); //work
 //char MainBuffer[sizeMainBuffer];
+
+std::vector<char> VectorBytes(1024);
+std::vector<char>::iterator itVectorBytes;
 
 char txBufferMsv[3]={0, };
 char rxBufferMsv[3]={0, };
@@ -90,7 +93,7 @@ void call_sockSendThread(){                                     /*send in port M
   uint32_t readFLAG=0;
     while(1){
             readFLAG=eventFlags.wait_all(MAINBUFFER_READY_FROM_SPI_FLAG);
-            clt_sock.send(&MainBuffer[0], sizeMainBuffer);
+            clt_sock.send(&VectorBytes[0], sizeMainBuffer);
             // for (int i = 0; i < sizeMainBuffer; i++) {
             //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
             // }
@@ -181,10 +184,15 @@ int main() {
 
     uint32_t sizeMainBuffer2=1024;
 
-    MainBuffer[0]=0x10;
-    MainBuffer[1]=0x20;
-    MainBuffer[2]=0x30;
-    MainBuffer[3]=0x40;
+    // MainBuffer[0]=0x10;
+    // MainBuffer[1]=0x20;
+    // MainBuffer[2]=0x30;
+    // MainBuffer[3]=0x40;
+
+    VectorBytes[0]=0x10;
+    VectorBytes[1]=0x20;
+    VectorBytes[2]=0x30;
+    VectorBytes[3]=0x40;
 
     drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
     spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
@@ -206,7 +214,7 @@ int main() {
       getCommandFromPort(&Recv_msv[0]);
     }
     //}
-delete[] MainBuffer;
+//delete[] MainBuffer;
 }
 
   //clt_sock.send(HTTP_RESPONSE, strlen(HTTP_RESPONSE));
