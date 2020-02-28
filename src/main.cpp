@@ -17,6 +17,7 @@ test vector
 #define GET_DATA_FROM_SPI_FLAG (1U << 2)
 #define MAINBUFFER_READY_FROM_SPI_FLAG (1U << 3)
 #define TEST_FLAG (1U << 4)
+#define STOP_GET_DATA_FROM_SPI_FLAG (1U << 5)
 
 #define HTTP_STATUS_LINE "HTTP/1.0 200 OK"
 #define HTTP_HEADER_FIELDS "Content-Type: text/html; charset=utf-8"
@@ -50,7 +51,7 @@ EthernetInterface eth;
 
 EventFlags eventFlags;
 
-bool flag1=true;
+bool flagGetDataSPI=true;
 const uint32_t sizeMainBuffer=8192;
 //uint32_t sizeMainBuffer=10;
 
@@ -82,14 +83,12 @@ void drdyINHandlerRise(){                                       //set flag after
 }
 
 void call_sockSendThread(){                                     /*send in port MainBuffer - if MainBuffer is ready*/
-  uint32_t readFLAG=0;
-    while(1){
-            readFLAG=eventFlags.wait_all(MAINBUFFER_READY_FROM_SPI_FLAG);
-            clt_sock.send(&VectorBytes[0], VectorBytes.size());
-            // for (int i = 0; i < sizeMainBuffer; i++) {
-            //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
-            // }
-            printf("MainBuffer was send, sizeMainBuffer=%u \n", sizeMainBuffer);fflush(stdout);
+    while(eventFlags.wait_all(MAINBUFFER_READY_FROM_SPI_FLAG)){
+        clt_sock.send(&VectorBytes[0], VectorBytes.size());
+        // for (int i = 0; i < sizeMainBuffer; i++) {
+        //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
+        // }
+        printf("MainBuffer was send, VectorBytes.size()=%u \n", VectorBytes.size());fflush(stdout);
     }
 }
 
@@ -100,10 +99,11 @@ void call_spiThread2(){
   char txBufferMsv[3]={0, };
   char rxBufferMsv[3]={0, };
 
-  while(1){
+  while(eventFlags.wait_all(GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){
+    //if(eventFlags.wait_all(STOP_GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){} //flagGetDataSPI=false;
     //read_flags = eventFlags.wait_any(BUTTON_PRESSED_FLAG); //1)ждем один флаг
     read_flags = eventFlags.wait_all(DRDY_IN_FLAG | GET_DATA_FROM_SPI_FLAG, osWaitForever, false); //waiting for all flags
-
+        printf("count = %u\n", count);
     chipSelect = 0; // Select device
     spi.write(txBufferMsv, 3, rxBufferMsv, 3);
     chipSelect = 1; // Deselect device
@@ -111,14 +111,16 @@ void call_spiThread2(){
                                         // for(uint8_t i=0; i<3; ++i){
                                         //     printf("rxBufferMsv[%d] = %d \n", i, rxBufferMsv[i]);
                                         // }
+    
     for(uint32_t i=0; i<3; i++){ 
         VectorBytes.push_back(rxBufferMsv[i]);
         count++;
-        if(count==sizeMainBuffer){
+        if(count==sizeMainBuffer || flagGetDataSPI==false){
             count=0;  //printf("STEP 2 \n");fflush(stdout);
             eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
             eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
-             wait(5);
+            break;
+            wait(5);
         }
     }
   }
@@ -147,12 +149,19 @@ void getCommandFromPort(char* ptr_recv_msv){
     case 2:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
         eventFlags.set(GET_DATA_FROM_SPI_FLAG);
-        eventFlags.set(TEST_FLAG);
+        //eventFlags.set(TEST_FLAG);
+        flagGetDataSPI=true;
       break;
     case 3:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
         printf("\n onOffLed() function has to work!\n");fflush(stdout);
         onOffLed();
+      break;
+    case 4:
+        printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
+        printf("\n %u \n", STOP_GET_DATA_FROM_SPI_FLAG);
+        //eventFlags.set(STOP_GET_DATA_FROM_SPI_FLAG);
+        flagGetDataSPI=false;
       break;
     case 5:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
@@ -173,8 +182,6 @@ int main() {
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
 
-    //uint32_t sizeMainBuffer2=1024;
-
     VectorBytes.push_back(0x10);
     VectorBytes.push_back(0x20);
     VectorBytes.push_back(0x30);
@@ -192,6 +199,7 @@ int main() {
             printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
     // flag1=true;
     while(1){
+      
       // srv.accept(&clt_sock, &clt_addr);
       //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
       clt_sock.recv(Recv_msv, 100);
@@ -200,7 +208,6 @@ int main() {
       getCommandFromPort(&Recv_msv[0]);
     }
     //}
-//delete[] MainBuffer;
 }
 
   //clt_sock.send(HTTP_RESPONSE, strlen(HTTP_RESPONSE));
