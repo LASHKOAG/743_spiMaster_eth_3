@@ -1,7 +1,10 @@
 /*
 743 spi master eth 3v4
-test vector
+staticMSV
 */
+
+char ExperementalBuffer[10000];
+char ExperementalBuffer2[10000];
 
 #include "mbed.h"
 #include "platform/mbed_thread.h"
