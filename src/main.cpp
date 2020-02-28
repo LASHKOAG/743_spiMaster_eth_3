@@ -4,12 +4,10 @@ test vector
 */
 
 #include "mbed.h"
-#include <rtos.h>
-//#include "platform/mbed_thread.h"
+#include "platform/mbed_thread.h"
 #include "EthernetInterface.h"
 #include "TCPServer.h"
 #include "TCPSocket.h"
-#include <stdio.h>
 #include <time.h>
 #include <vector>
 #include <iostream>
@@ -38,8 +36,6 @@ test vector
                       HTTP_MESSAGE_BODY "\r\n"
 
 
-
-//SPI spi(p5, p6, p7); // mosi, miso, sclk
 SPI spi(PD_7, PA_6, PA_5, PA_4); // mosi, miso, sclk, ssel
 DigitalOut chipSelect(PA_4);
 InterruptIn drdyIN(PE_3);
@@ -55,20 +51,16 @@ EthernetInterface eth;
 EventFlags eventFlags;
 
 bool flag1=true;
-const uint32_t sizeMainBuffer=1024;
+const uint32_t sizeMainBuffer=8192;
 //uint32_t sizeMainBuffer=10;
 
 uint32_t counterDRDY=0;
 
 int32_t counterFLAG=0;
-//char* MainBuffer = new char[sizeMainBuffer](); //work
-//char MainBuffer[sizeMainBuffer];
 
-std::vector<char> VectorBytes(1024);
+//std::vector<char> VectorBytes(1024);
+std::vector<char> VectorBytes;
 std::vector<char>::iterator itVectorBytes;
-
-char txBufferMsv[3]={0, };
-char rxBufferMsv[3]={0, };
 
 // struct structBuffer{
 //     int8_t MainBuffer[sizeMainBuffer];
@@ -93,7 +85,7 @@ void call_sockSendThread(){                                     /*send in port M
   uint32_t readFLAG=0;
     while(1){
             readFLAG=eventFlags.wait_all(MAINBUFFER_READY_FROM_SPI_FLAG);
-            clt_sock.send(&VectorBytes[0], sizeMainBuffer);
+            clt_sock.send(&VectorBytes[0], VectorBytes.size());
             // for (int i = 0; i < sizeMainBuffer; i++) {
             //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
             // }
@@ -105,10 +97,9 @@ void call_sockSendThread(){                                     /*send in port M
 void call_spiThread2(){
   uint32_t read_flags = 0;
   uint32_t count=0;
-        char txBufferMsv[3]={0, };
-        char rxBufferMsv[3]={0, };
-            //char * txBufferMsv = new char[3];
-            //char * rxBufferMsv = new char[3];
+  char txBufferMsv[3]={0, };
+  char rxBufferMsv[3]={0, };
+
   while(1){
     //read_flags = eventFlags.wait_any(BUTTON_PRESSED_FLAG); //1)ждем один флаг
     read_flags = eventFlags.wait_all(DRDY_IN_FLAG | GET_DATA_FROM_SPI_FLAG, osWaitForever, false); //waiting for all flags
@@ -121,7 +112,7 @@ void call_spiThread2(){
                                         //     printf("rxBufferMsv[%d] = %d \n", i, rxBufferMsv[i]);
                                         // }
     for(uint32_t i=0; i<3; i++){ 
-        MainBuffer[count] = rxBufferMsv[i];
+        VectorBytes.push_back(rxBufferMsv[i]);
         count++;
         if(count==sizeMainBuffer){
             count=0;  //printf("STEP 2 \n");fflush(stdout);
@@ -182,17 +173,12 @@ int main() {
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
 
-    uint32_t sizeMainBuffer2=1024;
+    //uint32_t sizeMainBuffer2=1024;
 
-    // MainBuffer[0]=0x10;
-    // MainBuffer[1]=0x20;
-    // MainBuffer[2]=0x30;
-    // MainBuffer[3]=0x40;
-
-    VectorBytes[0]=0x10;
-    VectorBytes[1]=0x20;
-    VectorBytes[2]=0x30;
-    VectorBytes[3]=0x40;
+    VectorBytes.push_back(0x10);
+    VectorBytes.push_back(0x20);
+    VectorBytes.push_back(0x30);
+    VectorBytes.push_back(0x40);
 
     drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
     spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
