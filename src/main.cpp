@@ -96,10 +96,12 @@ void call_sockSendThread(){                                     /*send in port M
 void call_spiThread2(){
   uint32_t read_flags = 0;
   uint32_t count=0;
+  bool flagEnableGetSPI=true;  /*опрашивать SPI или нет*/
   char txBufferMsv[3]={0, };
   char rxBufferMsv[3]={0, };
 
   while(eventFlags.wait_all(GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){
+    flagEnableGetSPI=true;/* опрашивать SPI */
     //if(eventFlags.wait_all(STOP_GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){} //flagGetDataSPI=false;
     //read_flags = eventFlags.wait_any(BUTTON_PRESSED_FLAG); //1)ждем один флаг
     read_flags = eventFlags.wait_all(DRDY_IN_FLAG | GET_DATA_FROM_SPI_FLAG, osWaitForever, false); //waiting for all flags
@@ -111,16 +113,27 @@ void call_spiThread2(){
                                         // for(uint8_t i=0; i<3; ++i){
                                         //     printf("rxBufferMsv[%d] = %d \n", i, rxBufferMsv[i]);
                                         // }
-    
-    for(uint32_t i=0; i<3; i++){ 
-        VectorBytes.push_back(rxBufferMsv[i]);
-        count++;
-        if(count==sizeMainBuffer || flagGetDataSPI==false){
-            count=0;  //printf("STEP 2 \n");fflush(stdout);
-            eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
-            eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
-            break;
-            wait(5);
+    if(count==sizeMainBuffer || flagGetDataSPI==false){
+      /*Сигнал о прекращении опроса по SPI может поступить
+       как в цикле for (ниже), так и до наступления момента входа в этот цикл.
+       Без этого куска кода в массив прибавится Байт*/
+        count=0;  //printf("STEP 2 \n");fflush(stdout);
+        eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
+        eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
+        flagEnableGetSPI =false; /*опрашивать SPI или нет*/
+    }
+
+    if(flagEnableGetSPI){
+        for(uint8_t i=0; i<3; i++){ //24bit ADC
+            VectorBytes.push_back(rxBufferMsv[i]);
+            count++;        /*пояснение к абзацу выше: здесь может в массив прибавится тот самый Байт*/
+            if(count==sizeMainBuffer || flagGetDataSPI==false){
+                count=0;  //printf("STEP 2 \n");fflush(stdout);
+                eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
+                eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
+                break;
+                //wait(5);
+            }
         }
     }
   }
@@ -159,8 +172,6 @@ void getCommandFromPort(char* ptr_recv_msv){
       break;
     case 4:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
-        printf("\n %u \n", STOP_GET_DATA_FROM_SPI_FLAG);
-        //eventFlags.set(STOP_GET_DATA_FROM_SPI_FLAG);
         flagGetDataSPI=false;
       break;
     case 5:
