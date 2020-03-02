@@ -3,9 +3,6 @@
 staticMSV
 */
 
-char ExperementalBuffer[10000];
-char ExperementalBuffer2[10000];
-
 #include "mbed.h"
 #include "platform/mbed_thread.h"
 #include "EthernetInterface.h"
@@ -39,6 +36,82 @@ char ExperementalBuffer2[10000];
                       "\r\n"                    \
                       HTTP_MESSAGE_BODY "\r\n"
 
+#define BUFFER_SIZE 5
+char DataB[BUFFER_SIZE];
+
+typedef struct
+{
+  int readIndex;
+  int writeIndex;
+  bool isEmpty;
+  bool isFull;
+  //char data[BUFFER_SIZE];
+}sCircularBuffer;
+
+void init(sCircularBuffer *apArray)
+{
+  apArray->readIndex  = 0;
+  apArray->writeIndex = 0;
+  apArray->isEmpty    = 1;
+  apArray->isFull     = 0;
+}
+//------------------------------------------------------------------------------
+int put(sCircularBuffer *apArray, char* ptrDataB, int aValue)
+{
+  if(apArray->isFull){return -1;} /*если буффер полон*/
+  if(apArray->writeIndex >= BUFFER_SIZE){apArray->writeIndex = 0;} /*переместиться в самое начало*/
+  if(apArray->isEmpty) /*если буффер пуст*/
+  {
+    apArray->isEmpty = 0;
+    // apArray->data[apArray->writeIndex++] = aValue;
+    ptrDataB[apArray->writeIndex++] = aValue;
+
+    if (apArray->writeIndex == apArray->readIndex)/*один индекс догнал другой, буффер полон*/
+      apArray->isFull  = 1;
+    return 1;
+  }
+
+  ptrDataB[apArray->writeIndex++] = aValue; /*если буффер не пуст*/
+
+  if (apArray->writeIndex == apArray->readIndex){apArray->isFull  = 1;}
+
+  return 1;
+}
+//------------------------------------------------------------------------------
+int get(sCircularBuffer *apArray, char* ptrDataB)
+{
+  if(apArray->isEmpty){return -1;}  /*если буффер пуст*/
+  
+  apArray->isFull = 0;  /*если буффер не пуст*/
+
+  if(apArray->readIndex >= BUFFER_SIZE){apArray->readIndex = 0;} 
+ 
+  int res = ptrDataB[apArray->readIndex++];
+
+  if(apArray->readIndex == apArray->writeIndex){apArray->isEmpty = 1;}
+  
+  return  res;
+}
+//------------------------------------------------------------------------------
+void clear(sCircularBuffer *apArray)
+{
+  apArray->isEmpty    = 1;
+  apArray->isFull     = 0;
+  apArray->writeIndex = 0;
+  apArray->readIndex  = 0;
+}
+//------------------------------------------------------------------------------
+int isEmpty(sCircularBuffer *apArray)
+{
+  return apArray->isEmpty;
+}
+//------------------------------------------------------------------------------
+int isFull(sCircularBuffer *apArray)
+{
+  return apArray->isFull;
+}
+
+//------------------------------------------------------------------------------
 
 SPI spi(PD_7, PA_6, PA_5, PA_4); // mosi, miso, sclk, ssel
 DigitalOut chipSelect(PA_4);
