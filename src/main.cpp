@@ -36,8 +36,13 @@ staticMSV
                       "\r\n"                    \
                       HTTP_MESSAGE_BODY "\r\n"
 
-#define BUFFER_SIZE 5
-char DataB[BUFFER_SIZE];
+#define BUFFER_SIZE_DATA_FROM_SPI 2000
+char DataFromSPI[BUFFER_SIZE_DATA_FROM_SPI];
+
+#define BUFFER_SIZE_DATA_TO_ETH 20000
+char DataToEth[BUFFER_SIZE_DATA_TO_ETH];
+
+int countWrittenElements=0;
 
 typedef struct
 {
@@ -45,8 +50,12 @@ typedef struct
   int writeIndex;
   bool isEmpty;
   bool isFull;
-  //char data[BUFFER_SIZE];
+  bool goToStartWriteIndex;
+  bool goToStartReadIndex;
+  //char data[BUFFER_SIZE_DATA_FROM_SPI];
 }sCircularBuffer;
+
+sCircularBuffer buff;
 
 void init(sCircularBuffer *apArray)
 {
@@ -56,37 +65,37 @@ void init(sCircularBuffer *apArray)
   apArray->isFull     = 0;
 }
 //------------------------------------------------------------------------------
-int put(sCircularBuffer *apArray, char* ptrDataB, int aValue)
+int put(sCircularBuffer *apArray, char* ptrDataFromSPI, int aValue)
 {
   if(apArray->isFull){return -1;} /*если буффер полон*/
-  if(apArray->writeIndex >= BUFFER_SIZE){apArray->writeIndex = 0;} /*переместиться в самое начало*/
+  if(apArray->writeIndex >= BUFFER_SIZE_DATA_FROM_SPI){apArray->writeIndex = 0; apArray->goToStartWriteIndex=true;} /*переместиться в самое начало*/
   if(apArray->isEmpty) /*если буффер пуст*/
   {
     apArray->isEmpty = 0;
     // apArray->data[apArray->writeIndex++] = aValue;
-    ptrDataB[apArray->writeIndex++] = aValue;
+    ptrDataFromSPI[apArray->writeIndex++] = aValue;
 
     if (apArray->writeIndex == apArray->readIndex)/*один индекс догнал другой, буффер полон*/
       apArray->isFull  = 1;
     return 1;
   }
 
-  ptrDataB[apArray->writeIndex++] = aValue; /*если буффер не пуст*/
+  ptrDataFromSPI[apArray->writeIndex++] = aValue; /*если буффер не пуст*/
 
   if (apArray->writeIndex == apArray->readIndex){apArray->isFull  = 1;}
 
   return 1;
 }
 //------------------------------------------------------------------------------
-int get(sCircularBuffer *apArray, char* ptrDataB)
+char get(sCircularBuffer *apArray, char* ptrDataFromSPI)
 {
   if(apArray->isEmpty){return -1;}  /*если буффер пуст*/
   
   apArray->isFull = 0;  /*если буффер не пуст*/
 
-  if(apArray->readIndex >= BUFFER_SIZE){apArray->readIndex = 0;} 
+  if(apArray->readIndex >= BUFFER_SIZE_DATA_FROM_SPI){apArray->readIndex = 0; apArray->goToStartReadIndex=true;} 
  
-  int res = ptrDataB[apArray->readIndex++];
+  char res = ptrDataFromSPI[apArray->readIndex++];
 
   if(apArray->readIndex == apArray->writeIndex){apArray->isEmpty = 1;}
   
@@ -128,7 +137,7 @@ EthernetInterface eth;
 EventFlags eventFlags;
 
 bool flagGetDataSPI=true;
-const uint32_t sizeMainBuffer=8192;
+//const uint32_t sizeMainBuffer=8192;
 //uint32_t sizeMainBuffer=10;
 
 uint32_t counterDRDY=0;
@@ -136,8 +145,8 @@ uint32_t counterDRDY=0;
 int32_t counterFLAG=0;
 
 //std::vector<char> VectorBytes(1024);
-std::vector<char> VectorBytes;
-std::vector<char>::iterator itVectorBytes;
+// std::vector<char> VectorBytes;
+// std::vector<char>::iterator itVectorBytes;
 
 // struct structBuffer{
 //     int8_t MainBuffer[sizeMainBuffer];
@@ -160,11 +169,60 @@ void drdyINHandlerRise(){                                       //set flag after
 
 void call_sockSendThread(){                                     /*send in port MainBuffer - if MainBuffer is ready*/
     while(eventFlags.wait_all(MAINBUFFER_READY_FROM_SPI_FLAG)){
-        clt_sock.send(&VectorBytes[0], VectorBytes.size());
+      //for(int i=0; i<BUFFER_SIZE_DATA_FROM_SPI; ++i){printf("DataFromSPI[%d] = %d\n", i, DataFromSPI[i]);fflush(stdout);}
+      printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
+      printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
+      printf("buff.isEmpty=%d \n",buff.isEmpty);fflush(stdout);
+      printf("buff.isFull=%d \n",buff.isFull);fflush(stdout);
+      printf("buff.writeIndex-buff.readIndexl=%d \n",buff.writeIndex-buff.readIndex);fflush(stdout);
+      //BUFFER_SIZE_DATA_FROM_SPI - buff.writeIndex(от места начала записи) +buff.writeIndex(текущий)
+      //char result = get(&buff, DataFromSPI);
+int countDataToEth = buff.writeIndex-buff.readIndex;
+printf("countDataToEth=%d \n",countDataToEth);fflush(stdout);
+printf("countWrittenElements=%d \n",countWrittenElements);fflush(stdout);
+if(buff.goToStartWriteIndex == true){
+  printf("step1 \n");fflush(stdout);
+  printf("(countWrittenElements - BUFFER_SIZE_DATA_FROM_SPI)=%d \n",(countWrittenElements - BUFFER_SIZE_DATA_FROM_SPI));fflush(stdout);
+  //printf("(BUFFER_SIZE_DATA_FROM_SPI - countWrittenElements)=%u \n",(BUFFER_SIZE_DATA_FROM_SPI - countWrittenElements));fflush(stdout);
+  int i=0; printf("i=%d \n",i);fflush(stdout);
+      for(i=buff.readIndex; i<BUFFER_SIZE_DATA_FROM_SPI; ++i){
+          DataToEth[i] = get(&buff, DataFromSPI);
+      }
+      printf("i=%d \n",i);fflush(stdout);
+      i+=1;printf("i=%d \n",i);fflush(stdout);
+      for(int k=0; k<(countWrittenElements - BUFFER_SIZE_DATA_FROM_SPI); ++k, ++i){
+          DataToEth[i] = get(&buff, DataFromSPI);
+      }
+      
+      buff.goToStartWriteIndex=false;
+
+      // for(i; i<buff.writeIndex; ++i){
+      //     DataToEth[i] = get(&buff, DataFromSPI);
+      // }
+        //  for (int k = 0; k < countWrittenElements; k++) {
+        //      printf("DataToEth[%d] = %d\n", k, DataToEth[k]);
+        //  }
+}else{
+      for(int i=buff.readIndex; i<countWrittenElements; ++i){
+          DataToEth[i] = get(&buff, DataFromSPI);
+      }
+}
+
+printf("check=%d \n",(BUFFER_SIZE_DATA_FROM_SPI - countWrittenElements+buff.writeIndex));fflush(stdout);
+      // for(int i=buff.readIndex; i<countDataToEth; ++i){
+      //     DataToEth[i] = get(&buff, DataFromSPI);
+      // }
+      printf("buff->readIndex2=%d \n",buff.readIndex);fflush(stdout);
+      printf("buff.writeIndex-buff.readIndexl=%d \n",buff.writeIndex-buff.readIndex);fflush(stdout);
+      //for(int i=0; i<100; ++i){printf(" DataToEth[%d] = %d\n", i, DataToEth[i]);fflush(stdout);}
+
+      //printf("result send=%d \n", result);fflush(stdout);
+        clt_sock.send(&DataToEth[0], countWrittenElements);
+        //printf("result send=%d \n", result);fflush(stdout);
         // for (int i = 0; i < sizeMainBuffer; i++) {
         //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
         // }
-        printf("MainBuffer was send, VectorBytes.size()=%u \n", VectorBytes.size());fflush(stdout);
+        //printf("MainBuffer was send, VectorBytes.size()=%u \n", VectorBytes.size());fflush(stdout);
         //VectorBytes.clear();
     }
 }
@@ -190,10 +248,12 @@ void call_spiThread2(){
                                         // for(uint8_t i=0; i<3; ++i){
                                         //     printf("rxBufferMsv[%d] = %d \n", i, rxBufferMsv[i]);
                                         // }
-    if(count==sizeMainBuffer || flagGetDataSPI==false){
+    //if(count==BUFFER_SIZE_DATA_FROM_SPI || flagGetDataSPI==false){
+      if(flagGetDataSPI==false){
       /*Сигнал о прекращении опроса по SPI может поступить
        как в цикле for (ниже), так и до наступления момента входа в этот цикл.
        Без этого куска кода в массив прибавится Байт*/
+        countWrittenElements=count;
         count=0;  //printf("STEP 2 \n");fflush(stdout);
         eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
         eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
@@ -202,9 +262,12 @@ void call_spiThread2(){
 
     if(flagEnableGetSPI){
         for(uint8_t i=0; i<3; i++){ //24bit ADC
-            VectorBytes.push_back(rxBufferMsv[i]);
+            //VectorBytes.push_back(rxBufferMsv[i]);
+            put(&buff, DataFromSPI, rxBufferMsv[i]);
             count++;        /*пояснение к абзацу выше: здесь может в массив прибавится тот самый Байт*/
-            if(count==sizeMainBuffer || flagGetDataSPI==false){
+            //if(count==BUFFER_SIZE_DATA_FROM_SPI || flagGetDataSPI==false){
+               if(flagGetDataSPI==false){
+                countWrittenElements=count;
                 count=0;  //printf("STEP 2 \n");fflush(stdout);
                 eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
                 eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
@@ -269,11 +332,11 @@ int main() {
     
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
+  int r;
+  int res_put;
 
-    VectorBytes.push_back(0x10);
-    VectorBytes.push_back(0x20);
-    VectorBytes.push_back(0x30);
-    VectorBytes.push_back(0x40);
+  init(&buff);
+
 
     drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
     spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
