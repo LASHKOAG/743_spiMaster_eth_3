@@ -1,6 +1,6 @@
 /*
 743 spi master eth 3v4
-staticMSV
+staticMSV ring read-write
 */
 
 #include "mbed.h"
