@@ -28,14 +28,19 @@ staticMSV ring read-write in parallel
 #define SIZE_MAINBUFFER 200000
 char MainBuffer[SIZE_MAINBUFFER];
 
-int countWrittenElements=0;
-int wasSend=0;
-int wasSend2=0;  
-int wasSend3=0;  
+uint32_t counterDRDY=0;
+int32_t counterFLAG=0;
+int numberBytesTakenFromSPI=0;
+int numberBytesSendToEth=0;
+int wasSendAll=0;
+int wasSend1=0;  
+int wasSend2=0;
+bool flagGetDataSPI=true;  
 bool test1=false;
+bool flagEndOfMeasurementSPI=true;
 int test2=0;
 int test3=0;
-
+    
 typedef struct
 {
   int readIndex;
@@ -95,13 +100,12 @@ if((apArray->readIndex + 1) == apArray->writeIndex){
    Это приведет к ошибочному сбору данных.
    Данная проверка "притормаживает" read из буффера.*/
     test1=true;
-    wait_us(7000);
-    // printf("bool test1=%d \n",test1);fflush(stdout);
-    // test1=false;
-    // for(uint32_t i =0; i<1000000; ++i){;}
+    //wait_ms(100000);
+    printf("bool test1=%d \n",test1);fflush(stdout); /*хорошо работает вместо wait. Read to Eth is more faster than writing SPI*/
+    //test1=false;
+     //for(uint32_t i =0; i<4000000000; ++i){;}
 }
-//if((apArray->readIndex % 10000)==0){test2++;}
-//if(test2==2){printf("\nstep STOP \n");fflush(stdout);}
+
   if(apArray->readIndex == apArray->writeIndex){apArray->isEmpty = 1;}
   
   return  res;
@@ -141,12 +145,7 @@ EthernetInterface eth;
 
 EventFlags eventFlags;
 
-bool flagGetDataSPI=true;
-//const uint32_t sizeMainBuffer=8192;
-//uint32_t sizeMainBuffer=10;
 
-uint32_t counterDRDY=0;
-int32_t counterFLAG=0;
 
 // struct structBuffer{
 //     int8_t MainBuffer[sizeMainBuffer];
@@ -170,142 +169,59 @@ void drdyINHandlerRise(){                                       //set flag after
 void call_sockSendThread(){ 
     int sizeTempBuf=100;   
     char TempBuf[sizeTempBuf];
-    bool waitFlags2=false;
-    bool waitFlags=true;
-    bool test6=true;
-    int globalCountTempBuf=0;
-    bool onWhile=false;
-    
-    while(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)){
-        for(int i=0; i<sizeTempBuf; ++i){
-           TempBuf[i]=get(&buff, MainBuffer);
+    int counter=0;
+    bool flagSendFirstPartToEth=true;
+    int step=0;
+
+    while(1){
+      if(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)){
+        step=1;
+      }
+
+     switch (step)
+        {
+        case 1:
+            while(flagSendFirstPartToEth){
+              for(counter; counter<sizeTempBuf; ){
+                if(flagEndOfMeasurementSPI==false){flagSendFirstPartToEth=false; step=2; break;}
+                TempBuf[counter]=get(&buff, MainBuffer);
+                numberBytesSendToEth++;
+                counter++;
+              }
+              wasSend1+=clt_sock.send(&TempBuf[0], counter);
+              counter=0;
+            }
+         //break; 
+
+        case 2:
+          counter=0;
+          int difference=(numberBytesTakenFromSPI - numberBytesSendToEth);
+          if(difference==0){break;}
+          //while(difference--){
+          while(difference){
+              for(counter; counter<sizeTempBuf; ){
+                if(difference==0){break;}
+                TempBuf[counter]=get(&buff, MainBuffer);
+                numberBytesSendToEth++;
+                difference=(numberBytesTakenFromSPI - numberBytesSendToEth);
+                counter++;
+              }
+
+              wasSend2+=clt_sock.send(&TempBuf[0], counter);
+              counter=0;
+            }
+            counter=0;
+            wasSend1=0;/*для отладки*/
+            wasSend2=0;/*для отладки*/
+            step=0;
+            numberBytesSendToEth=0;
+            numberBytesTakenFromSPI=0;
+            flagSendFirstPartToEth=true;
+            clear(&buff);  /*переставляем индексы кольцевого буффера в начало*/
+            //eventFlags.clear(STOP_PUSH_DATA_TO_ETH_FLAG);
+          break;
         }
-          wasSend2=clt_sock.send(&TempBuf[0], sizeTempBuf);
-          wasSend3+=wasSend2;
     }
-/*
-    while(waitFlags){
-            if(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)){
-            waitFlags2=true;
-            waitFlags=false;
-            //printf("step1 \n");fflush(stdout);
-        }
-    }
-    //while(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)){
-      
-      while(waitFlags2){
-        //printf("step2 \n");fflush(stdout);
-        eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false);
-        //printf("step3 \n");fflush(stdout);
-if(eventFlags.wait_all(STOP_PUSH_DATA_TO_ETH_FLAG, osWaitForever, false)){
-           for(int i=0; i<sizeTempBuf; ++i){
-           TempBuf[i]=get(&buff, MainBuffer);
-           if(buff.readIndex==buff.writeIndex){
-             waitFlags2=false;
-             waitFlags=true;
-             wasSend2=clt_sock.send(&TempBuf[0], i);
-             wasSend3+=wasSend2;
-              break;
-             }
-           //wasSend++;
-           //if(wasSend >= buff.readIndex){break;}
-         }
-}else{
-          for(int i=0; i<sizeTempBuf; ++i){
-           TempBuf[i]=get(&buff, MainBuffer);
-
-           //wasSend++;
-           //if(wasSend >= buff.readIndex){break;}
-         }
-          wasSend2=clt_sock.send(&TempBuf[0], sizeTempBuf);
-          wasSend3+=wasSend2;
-}
-         //printf("step1 \n");fflush(stdout);
-         //wait_ms(1);
-         //if(buff.readIndex==buff.writeIndex){test6=false;}
-         for(int i=0; i<sizeTempBuf; ++i){
-           TempBuf[i]=get(&buff, MainBuffer);
-           if(buff.readIndex==buff.writeIndex){
-             test6=false;globalCountTempBuf=i;
-             wasSend2=clt_sock.send(&TempBuf[0], i);
-             wasSend3+=wasSend2;
-              break;
-             }
-           //wasSend++;
-           //if(wasSend >= buff.readIndex){break;}
-         }
-          wasSend2=clt_sock.send(&TempBuf[0], sizeTempBuf);
-          wasSend3+=wasSend2;
-*/
-          if(wasSend3 >= SIZE_MAINBUFFER){wasSend3=0;}
-         //char sendByte = get(&buff, MainBuffer);
-        //  clt_sock.send(&sendByte, 1);
-        /*
-        if(wasSend >= buff.readIndex){
-          wasSend2=clt_sock.send(&TempBuf[0], wasSend);
-          wasSend3+=wasSend2;
-        }else{
-          wasSend2=clt_sock.send(&TempBuf[0], sizeTempBuf);
-          wasSend3+=wasSend2;
-        }
-        */
-        //wasSend+=sizeTempBuf;
-      //for(int i=0; i<BUFFER_SIZE_DATA_FROM_SPI; ++i){printf("DataFromSPI[%d] = %d\n", i, DataFromSPI[i]);fflush(stdout);}
-      //  printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
-      //  printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
-      // printf("buff.isEmpty=%d \n",buff.isEmpty);fflush(stdout);
-      // printf("buff.isFull=%d \n",buff.isFull);fflush(stdout);
-      // printf("buff.writeIndex-buff.readIndexl=%d \n",buff.writeIndex-buff.readIndex);fflush(stdout);
-      //BUFFER_SIZE_DATA_FROM_SPI - buff.writeIndex(от места начала записи) +buff.writeIndex(текущий)
-      //char result = get(&buff, DataFromSPI);
-// int countDataToEth = buff.writeIndex-buff.readIndex;
-// printf("countDataToEth=%d \n",countDataToEth);fflush(stdout);
-// printf("countWrittenElements=%d \n",countWrittenElements);fflush(stdout);
-// if(buff.goToStartWriteIndex == true){
-//   printf("step1 \n");fflush(stdout);
-//   printf("(countWrittenElements - BUFFER_SIZE_DATA_FROM_SPI)=%d \n",(countWrittenElements - BUFFER_SIZE_DATA_FROM_SPI));fflush(stdout);
-//   //printf("(BUFFER_SIZE_DATA_FROM_SPI - countWrittenElements)=%u \n",(BUFFER_SIZE_DATA_FROM_SPI - countWrittenElements));fflush(stdout);
-//   int i=0; printf("i=%d \n",i);fflush(stdout);
-//       for(i=buff.readIndex; i<BUFFER_SIZE_DATA_FROM_SPI; ++i){
-//           DataToEth[i] = get(&buff, DataFromSPI);
-//       }
-//       printf("i=%d \n",i);fflush(stdout);
-//       i+=1;printf("i=%d \n",i);fflush(stdout);
-//       for(int k=0; k<(countWrittenElements - BUFFER_SIZE_DATA_FROM_SPI); ++k, ++i){
-//           DataToEth[i] = get(&buff, DataFromSPI);
-//       }
-      
-//       buff.goToStartWriteIndex=false;
-
-      // for(i; i<buff.writeIndex; ++i){
-      //     DataToEth[i] = get(&buff, DataFromSPI);
-      // }
-        //  for (int k = 0; k < countWrittenElements; k++) {
-        //      printf("DataToEth[%d] = %d\n", k, DataToEth[k]);
-        //  }
-// }else{
-//       for(int i=buff.readIndex; i<countWrittenElements; ++i){
-//           DataToEth[i] = get(&buff, DataFromSPI);
-//       }
-//}
-
-//printf("check=%d \n",(BUFFER_SIZE_DATA_FROM_SPI - countWrittenElements+buff.writeIndex));fflush(stdout);
-      // for(int i=buff.readIndex; i<countDataToEth; ++i){
-      //     DataToEth[i] = get(&buff, DataFromSPI);
-      // }
-      //printf("buff->readIndex2=%d \n",buff.readIndex);fflush(stdout);
-      //printf("buff.writeIndex-buff.readIndexl=%d \n",buff.writeIndex-buff.readIndex);fflush(stdout);
-      //for(int i=0; i<100; ++i){printf(" DataToEth[%d] = %d\n", i, DataToEth[i]);fflush(stdout);}
-
-      //printf("result send=%d \n", result);fflush(stdout);
-        //clt_sock.send(&DataToEth[0], countWrittenElements);
-        //printf("result send=%d \n", result);fflush(stdout);
-        // for (int i = 0; i < sizeMainBuffer; i++) {
-        //     printf("MainBuffer[%d] = %x\n", i, MainBuffer[i]);
-        // }
-        //printf("MainBuffer was send, VectorBytes.size()=%u \n", VectorBytes.size());fflush(stdout);
-        //VectorBytes.clear();
-    //}
 }
 
 
@@ -333,7 +249,7 @@ void call_spiThread2(){
       /*Сигнал о прекращении опроса по SPI может поступить
        как в цикле for (ниже), так и до наступления момента входа в этот цикл.
        Без этого куска кода в массив прибавится Байт*/
-        countWrittenElements=count;
+        numberBytesTakenFromSPI=count;
         count=0;  //printf("STEP 2 \n");fflush(stdout);
         eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
         //eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
@@ -348,12 +264,11 @@ void call_spiThread2(){
             
             count++;        /*пояснение к абзацу выше: здесь может в массив прибавится тот самый Байт*/
                if(flagGetDataSPI==false){
-                countWrittenElements=count;
+                numberBytesTakenFromSPI=count;
                 count=0;  //printf("STEP 2 \n");fflush(stdout);
                 eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
                 //eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
                 break;
-                //wait(5);
             }
         }
     }
@@ -382,31 +297,32 @@ void getCommandFromPort(char* ptr_recv_msv){
 
   switch (valueFromCommand){
     case 2:
-        printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
+        printf("\nget command from port: %d\n", valueFromCommand);fflush(stdout);
         eventFlags.set(GET_DATA_FROM_SPI_FLAG);
         eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
-        //eventFlags.set(TEST_FLAG);
         flagGetDataSPI=true;
+        flagEndOfMeasurementSPI=true;
       break;
     case 3:
-        printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
+        printf("\nget command from port: %d \n", valueFromCommand);fflush(stdout);
         printf("\n onOffLed() function has to work!\n");fflush(stdout);
         onOffLed();
       break;
     case 4:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
-
+            flagEndOfMeasurementSPI=false;
+            //eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
             eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
             eventFlags.clear(READY_TO_SEND_DATA_FLAG);
-            eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
             flagGetDataSPI=false;
-        
         printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
         printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
-        printf("countWrittenElements=%d \n",countWrittenElements);fflush(stdout);        
-        //printf("wasSend=%d \n",wasSend);fflush(stdout);
-        printf("wasSend3=%d \n",wasSend3);fflush(stdout);
-        printf("bool test1=%d \n",test1);fflush(stdout);
+        printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);fflush(stdout);        
+        //printf("bool test1=%d \n",test1);fflush(stdout);
+            printf("============================ \n");fflush(stdout);
+        //printf("numberBytesSendToEth %d \n",numberBytesSendToEth);fflush(stdout);
+        //printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
+        //printf("wasSendAll=%d \n",wasSendAll);fflush(stdout);
       break;
     case 5:
         printf("\nget command %d from port\n", valueFromCommand);fflush(stdout);
