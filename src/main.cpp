@@ -11,6 +11,7 @@ staticMSV ring read-write in parallel
 #include <time.h>
 #include <vector>
 #include <iostream>
+#include "hwclockstm.h"
 
 #define DRDY_IN_FLAG (1U << 0)
 #define GET_DATA_FROM_SPI_FLAG (1U << 1)
