@@ -54,7 +54,7 @@ typedef struct
 
 sCircularBuffer buff;
 
-void init(sCircularBuffer *apArray)
+void initStructCircularBuffer(sCircularBuffer *apArray)
 {
   apArray->readIndex  = 0;
   apArray->writeIndex = 0;
@@ -142,15 +142,11 @@ TCPServer srv;
 TCPSocket clt_sock;
 SocketAddress clt_addr;
 EthernetInterface eth;
-
 EventFlags eventFlags;
-
-
 
 // struct structBuffer{
 //     int8_t MainBuffer[sizeMainBuffer];
 // }structBuff;
-
 
 int8_t onOffLed(){                                            // function for check
     DigitalOut led3(LED3);
@@ -234,8 +230,8 @@ void call_spiThread2(){
 
   while(eventFlags.wait_all(GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){
     flagEnableGetSPI=true;/* опрашивать SPI */
-    //if(eventFlags.wait_all(STOP_GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){} //flagGetDataSPI=false;
-    //read_flags = eventFlags.wait_any(BUTTON_PRESSED_FLAG); //1)ждем один флаг
+        //if(eventFlags.wait_all(STOP_GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){} //flagGetDataSPI=false;
+        //read_flags = eventFlags.wait_any(BUTTON_PRESSED_FLAG); //1)ждем один флаг
     read_flags = eventFlags.wait_all(DRDY_IN_FLAG | GET_DATA_FROM_SPI_FLAG, osWaitForever, false); //waiting for all flags
         //printf("count = %u\n", count);
     chipSelect = 0; // Select device
@@ -293,7 +289,7 @@ void ethernetInterfaceInit(){
 
 void getCommandFromPort(char* ptr_recv_msv){
   int32_t valueFromCommand = ptr_recv_msv[0]-0x30;
-/* обнулить входящий массив после того как он отработает*/
+  /* обнулить входящий массив после того как он отработает*/
 
   switch (valueFromCommand){
     case 2:
@@ -347,7 +343,7 @@ int main() {
   int r;
   int res_put;
 
-  init(&buff);
+  initStructCircularBuffer(&buff);
 
 
     drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
