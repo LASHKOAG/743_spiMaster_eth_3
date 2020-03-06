@@ -55,16 +55,15 @@ typedef struct
 
 sCircularBuffer buff;
 
-void initStructCircularBuffer(sCircularBuffer *apArray)
-{
+void initStructCircularBuffer(sCircularBuffer *apArray){
   apArray->readIndex  = 0;
   apArray->writeIndex = 0;
   apArray->isEmpty    = 1;
   apArray->isFull     = 0;
 }
 //------------------------------------------------------------------------------
-int put(sCircularBuffer *apArray, char* ptrMainBuffer, int aValue)
-{
+//int put(sCircularBuffer *apArray, char* ptrMainBuffer, int aValue){
+int put(sCircularBuffer *apArray, char* ptrMainBuffer, char aValue){
   if(apArray->isFull){return -1;} /*если буффер полон*/
   if(apArray->writeIndex >= SIZE_MAINBUFFER){apArray->writeIndex = 0;test3++;} /*переместиться в самое начало*/
   if(apArray->isEmpty) /*если буффер пуст*/
@@ -85,8 +84,7 @@ int put(sCircularBuffer *apArray, char* ptrMainBuffer, int aValue)
   return 1;
 }
 //------------------------------------------------------------------------------
-char get(sCircularBuffer *apArray, char* ptrMainBuffer)
-{
+char get(sCircularBuffer *apArray, char* ptrMainBuffer){
   if(apArray->isEmpty){return -1;}  /*если буффер пуст*/
   
   apArray->isFull = 0;  /*??? if ?? если буффер не пуст*/
@@ -312,8 +310,8 @@ void getCommandFromPort(char* ptr_recv_msv){
             eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
             eventFlags.clear(READY_TO_SEND_DATA_FLAG);
             flagGetDataSPI=false;
-        printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
-        printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
+        //printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
+        //printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
         printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);fflush(stdout);        
         //printf("bool test1=%d \n",test1);fflush(stdout);
             printf("============================ \n");fflush(stdout);
