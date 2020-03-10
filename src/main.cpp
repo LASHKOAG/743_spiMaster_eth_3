@@ -1,5 +1,6 @@
 /*
-743 spi master eth 3v4
+743 spi master eth 3
+testClock
 staticMSV ring read-write in parallel
 */
 
