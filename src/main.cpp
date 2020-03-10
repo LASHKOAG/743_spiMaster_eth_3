@@ -14,6 +14,7 @@ staticMSV ring read-write in parallel
 #include <iostream>
 #include "hwclockstm.h"
 #include "circbuff.h"
+#include <string>
 
 #define DRDY_IN_FLAG (1U << 0)
 #define GET_DATA_FROM_SPI_FLAG (1U << 1)
@@ -278,6 +279,75 @@ void getCommandFromPort(char* ptr_recv_msv)
     }
 }
 
+void getCommandFromPort3(std::string& CommandFromPort)
+{
+    int32_t numberCase=0;
+    std::cout << " Command from port <- " << CommandFromPort << std::endl;
+
+    string strGetDataSPI="2";
+    string strStopGetDataSPI="4";
+    string strDate="date";
+
+    if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
+    if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
+    if (CommandFromPort.compare(0,strDate.size(), strDate) == 0){numberCase=6; printf("case 6\n");}
+
+    /* обнулить входящий массив после того как он отработает*/
+
+    switch (numberCase) {
+        case 2:
+            printf("\nget command from port: %s\n", &CommandFromPort);
+            fflush(stdout);
+            eventFlags.set(GET_DATA_FROM_SPI_FLAG);
+            eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
+            flagGetDataSPI=true;
+            flagEndOfMeasurementSPI=true;
+            break;
+        case 3:
+            printf("\nget command from port: %s \n", &CommandFromPort);
+            fflush(stdout);
+            printf("\n onOffLed() function has to work!\n");
+            fflush(stdout);
+            onOffLed();
+            break;
+        case 4:
+            printf("\nget command %s from port\n", &CommandFromPort);
+            fflush(stdout);
+            flagEndOfMeasurementSPI=false;
+            //eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
+            eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
+            eventFlags.clear(READY_TO_SEND_DATA_FLAG);
+            flagGetDataSPI=false;
+            //printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
+            //printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
+            //printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);
+            fflush(stdout);
+            //printf("bool test1=%d \n",test1);fflush(stdout);
+            printf("============================ \n");
+            fflush(stdout);
+            //printf("numberBytesSendToEth %d \n",numberBytesSendToEth);fflush(stdout);
+            //printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
+            //printf("wasSendAll=%d \n",wasSendAll);fflush(stdout);
+            break;
+        case 5:
+            printf("\nget command %s from port\n", &CommandFromPort);
+            fflush(stdout);
+            printf("\n port close()\n");
+            fflush(stdout);
+
+
+            // srv.close();
+            // //eth.
+            // eth.disconnect();
+            // flag1=false;
+            // wait(120);
+            break;
+        case 6:
+                std::cout << "step case 6" << std::endl;
+            break;
+    }
+}
+
 int main()
 {
     printf("\n======== 1-start ======================\n");
@@ -302,17 +372,22 @@ int main()
     ethernetInterfaceInit();
 
     char Recv_msv[100];                  /* buffer for command from port */
+    string strRecv_msv;                  /* buffer for command from port */
     //while(1){
     srv.accept(&clt_sock, &clt_addr);
     printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
     // flag1=true;
+
     while(1) {
 
         // srv.accept(&clt_sock, &clt_addr);
         //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-        clt_sock.recv(Recv_msv, 100);
-        printf("Recv recv_msv %s \n", Recv_msv);
-        getCommandFromPort(&Recv_msv[0]);
+        clt_sock.recv(&Recv_msv, 100);
+            printf("Recv recv_msv %s \n", Recv_msv);
+            printf("strlen Recv_msv =%d\n", strlen(Recv_msv));
+        strRecv_msv=Recv_msv;
+
+        getCommandFromPort3(strRecv_msv);
     }
     //}
 }
