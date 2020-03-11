@@ -1,7 +1,6 @@
 /*
 743 spi master eth 3
-testClock
-staticMSV ring read-write in parallel
+server1
 */
 
 #include "mbed.h"
@@ -205,19 +204,13 @@ void call_spiThread2()
 void ethernetInterfaceInit()
 {
     //EthernetInterface eth;
-    printf("\n======== step EthernetInterfaceFunction() ======================\n");
-    fflush(stdout);
+            printf("\n======== step EthernetInterfaceFunction() ======================\n"); fflush(stdout);
     int ret;
     ret = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
-    printf("Set Net: %d\r\n",ret);
-    fflush(stdout);
-
+            printf("Set Net: %d\r\n",ret);fflush(stdout);
     eth.connect();
-    printf("\nstep eth.connect()\n");
-    fflush(stdout);
-    printf("The target IP address is '%s'\n", eth.get_ip_address());
-    fflush(stdout);
-
+            printf("\nstep eth.connect()\n");fflush(stdout);
+            printf("The target IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
     srv.open(&eth);                         /* Open the server on ethernet stack */
     srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
     srv.listen(5);                          /* Can handle 5 simultaneous connections */
