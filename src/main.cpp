@@ -15,6 +15,7 @@ struct1
 #include "hwclockstm.h"
 #include "circbuff.h"
 #include <string>
+#include "socket_struct.h"
 
 #define DRDY_IN_FLAG (1U << 0)
 #define GET_DATA_FROM_SPI_FLAG (1U << 1)
