@@ -9,6 +9,7 @@ struct1
 #include "EthernetInterface.h"
 #include "TCPServer.h"
 #include "TCPSocket.h"
+#include <queue>
 #include <time.h>
 #include <vector>
 #include <iostream>
@@ -45,17 +46,19 @@ bool test1=false;
 bool flagEndOfMeasurementSPI=true;
 int test2=0;
 int test3=0;
-
+bool flagMainThread = false;
 
 SPI spi(PD_7, PA_6, PA_5, PA_4); // mosi, miso, sclk, ssel
 DigitalOut chipSelect(PA_4);
 InterruptIn drdyIN(PE_3);
 
+//Queue myQueue( 1, 5 );
+
 Thread spiThread;
 Thread sockSendThread;
 
-TCPServer srv;
-TCPSocket clt_sock;
+TCPSocket srv;  //TCPServer was migrate to TCPSocket
+TCPSocket *clt_sock;
 SocketAddress clt_addr;
 EthernetInterface eth;
 EventFlags eventFlags;
@@ -108,7 +111,7 @@ void call_sockSendThread()
                         numberBytesSendToEth++;
                         counter++;
                     }
-                    wasSend1+=clt_sock.send(&TempBuf[0], counter);
+                    wasSend1+=clt_sock->send(&TempBuf[0], counter);
                     counter=0;
                 }
             //break;
@@ -131,7 +134,7 @@ void call_sockSendThread()
                         counter++;
                     }
 
-                    wasSend2+=clt_sock.send(&TempBuf[0], counter);
+                    wasSend2+=clt_sock->send(&TempBuf[0], counter);
                     counter=0;
                 }
                 counter=0;
@@ -203,7 +206,7 @@ void call_spiThread2()
     }
 }
 
-void ethernetInterfaceInit()
+int ethernetInterfaceInit()
 {
     //EthernetInterface eth;
     printf("\n======== step EthernetInterfaceFunction() ======================\n");
@@ -211,26 +214,30 @@ void ethernetInterfaceInit()
     int ret;
     ret = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
     printf("Set Net: %d\r\n",ret); fflush(stdout);
-    
-        //while (!eth.connect()); // join the network
-    eth.connect();
-    printf("\nstep eth.connect()\n");
-    fflush(stdout);
-    printf("The target IP address is '%s'\n", eth.get_ip_address());
-    fflush(stdout);
+ 
+    if(0 != eth.connect()) {
+            printf("Error connecting \n");
+        //return -1;
+    }else{
+        //eth.connect();
+        printf("\nstep eth.connect()\n");  fflush(stdout);
+        printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
+        
+        srv.open(&eth);                         /* Open the server on ethernet stack */
+        int rrr = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
+        printf("rrr: %d\r\n",rrr);
+        int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
+        printf("rett: %d\r\n",rett);
 
-    srv.open(&eth);                         /* Open the server on ethernet stack */
-    int rrr = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
-    printf("rrr: %d\r\n",rrr);
-    int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
-    printf("rett: %d\r\n",rett);
+        return 0;
+    }
+    return -2;
 }
 
 void getCommandFromPort(char* ptr_recv_msv)
 {
     int32_t valueFromCommand = ptr_recv_msv[0]-0x30;
     /* обнулить входящий массив после того как он отработает*/
-
     switch (valueFromCommand) {
         case 2:
             printf("\nget command from port: %d\n", valueFromCommand);
@@ -279,6 +286,7 @@ void getCommandFromPort(char* ptr_recv_msv)
             // flag1=false;
             // wait(120);
             break;
+
     }
 }
 
@@ -294,8 +302,11 @@ void getCommandFromPort3(std::string& CommandFromPort)
     if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
     if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
     if (CommandFromPort.compare(0,strDate.size(), strDate) == 0){numberCase=6; printf("case 6\n");}
+    if(std::stoi(CommandFromPort) == CMD_HAL_STOP_TS_TASK){numberCase = CMD_HAL_STOP_TS_TASK;}
 
     /* обнулить входящий массив после того как он отработает*/
+    
+    tcp_packet_t packet;
 
     switch (numberCase) {
         case 2:
@@ -348,6 +359,23 @@ void getCommandFromPort3(std::string& CommandFromPort)
         case 6:
                 std::cout << "step case 6" << std::endl;
             break;
+        case CMD_HAL_STOP_TS_TASK:
+        	    printf("Command: stop TIMESIGNAL task\n");
+            int res = TCP_EC_SUCCESS;
+                // if (ts_task != NULL){
+                // ts_task->stop();
+                // }
+            //заслать ответ
+            tcp_packet_t ans;
+            memset(&ans, 0x00, sizeof(tcp_packet_t));
+            ans.command = CMD_ANSWER;
+            ans.length = sizeof(ans.command)+sizeof(int);
+            ans.buff = new char[ans.length];
+            memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+            memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(int));
+            //int cnt = send_packet(&ans);
+            delete[] ans.buff;
+            break;
     }
 }
 
@@ -355,9 +383,7 @@ int main()
 {
     printf("\n======== 1-start ======================\n");
     fflush(stdout);
-    
-    //CircBuff *CircBuffer= new CircBuff();
-    
+
     printf("Basic HTTP server example\n");
 
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
@@ -372,20 +398,25 @@ int main()
     spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
     sockSendThread.start(call_sockSendThread);  //send data in ethernet port to client
 
-    ethernetInterfaceInit();
+    int resEth = ethernetInterfaceInit();
 
     char Recv_msv[100];                  /* buffer for command from port */
     string strRecv_msv;                  /* buffer for command from port */
     //while(1){
-    srv.accept(&clt_sock, &clt_addr);
-    printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-    // flag1=true;
 
-    while(1) {
+    if(resEth==0){
+        //srv.accept(&clt_sock, &clt_addr);
+        clt_sock = srv.accept();  //return pointer of a client socket
+        clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
+            printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+         flagMainThread=true;
+    }
+
+    while(flagMainThread) {
 
         // srv.accept(&clt_sock, &clt_addr);
         //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-        clt_sock.recv(&Recv_msv, 100);
+        clt_sock->recv(&Recv_msv, 100);
             printf("Recv recv_msv %s \n", Recv_msv);
             printf("strlen Recv_msv =%d\n", strlen(Recv_msv));
         strRecv_msv=Recv_msv;
@@ -395,6 +426,21 @@ int main()
     //}
 }
 
+/*
+
+        queue<string> myQueue;     // создаем пустую очередь типа string
+ 
+    // добавили в очередь несколько элементов типа string
+    myQueue.push("No pain ");
+    myQueue.push("- no gain");
+ 
+    cout << "Количество элементов в очереди: " << myQueue.size() << endl;
+    cout << "\nВот они: " << myQueue.front() << myQueue.back();
+ 
+    myQueue.pop(); // удаляем один элемент в очереди
+    cout << "\nТеперь в очереди остался один элемент: " << myQueue.front();
+    cout << "Количество элементов в очереди: " << myQueue.size() << endl;
+*/
 //apArray->goToStartWriteIndex=true;
 // apArray->goToStartReadIndex=true;
 
