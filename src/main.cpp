@@ -17,6 +17,19 @@ struct1
 #include "circbuff.h"
 #include <string>
 #include "socket_struct.h"
+#include <map>    //подключили библиотеку для работы с map
+#include <algorithm>
+
+#include "rtos/Thread.h"
+//#include "rtos/rtos_idle.h"
+#include "platform/mbed_critical.h"
+
+#include "platform/CircularBuffer.h"
+
+#define BUF_SIZE    400
+
+CircularBuffer<int, BUF_SIZE> buf;
+uint32_t bytes_written = 0;
 
 #define DRDY_IN_FLAG (1U << 0)
 #define GET_DATA_FROM_SPI_FLAG (1U << 1)
@@ -56,18 +69,46 @@ InterruptIn drdyIN(PE_3);
 
 Thread spiThread;
 Thread sockSendThread;
+Thread resultTaskThread;
 
 TCPSocket srv;  //TCPServer was migrate to TCPSocket
 TCPSocket *clt_sock;
 SocketAddress clt_addr;
 EthernetInterface eth;
 EventFlags eventFlags;
+// CriticalSectionLock csLock;
 
 CircBuff *CircBuffer= new CircBuff();
 //CircBuffer->initStructCircularBuffer();
 // struct structBuffer{
 //     int8_t MainBuffer[sizeMainBuffer];
 // }structBuff;
+
+    map <char, char> myMap;
+    vector <char> myVec;
+    vector<char> myVec2;
+
+template < typename T>
+std::pair<bool, char > findInVector(const std::vector<T>  & vecOfElements, const T  & element)
+{
+    std::pair<bool, char > result;
+
+    // Find given element in vector
+    auto it = std::find(vecOfElements.begin(), vecOfElements.end(), element);
+
+    if (it != vecOfElements.end())
+    {
+        result.second = distance(vecOfElements.begin(), it);
+        result.first = true;
+    }
+    else
+    {
+        result.first = false;
+        result.second = -1;
+    }
+
+    return result;
+}
 
 int8_t onOffLed()                                             // function for check
 {
@@ -290,6 +331,23 @@ void getCommandFromPort(char* ptr_recv_msv)
     }
 }
 
+void deleteTask(){
+    char numberTask = (char)120;
+    if(findInVector(myVec, numberTask).first == true){
+        int index = findInVector(myVec, numberTask).second;
+        cout << "index = findInVector= " << index << endl;
+        myVec.erase(myVec.begin() + index -1);
+        myMap.erase(numberTask);
+
+        // std::map<char,int>::iterator iter;
+        // iter=myMap.find(numberTask);
+        // myMap.erase(iter);
+    }else{
+        printf("\n-------kosyak------\n");
+    }
+
+}
+
 void getCommandFromPort3(std::string& CommandFromPort)
 {
     int32_t numberCase=0;
@@ -298,11 +356,13 @@ void getCommandFromPort3(std::string& CommandFromPort)
     string strGetDataSPI="2";
     string strStopGetDataSPI="4";
     string strDate="date";
+    string deleteTasks="9";
 
     if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
     if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
     if (CommandFromPort.compare(0,strDate.size(), strDate) == 0){numberCase=6; printf("case 6\n");}
     if(std::stoi(CommandFromPort) == CMD_HAL_STOP_TS_TASK){numberCase = CMD_HAL_STOP_TS_TASK;}
+    if (CommandFromPort.compare(0,deleteTasks.size(), deleteTasks) == 0){numberCase=9; printf("case 9\n");}
 
     /* обнулить входящий массив после того как он отработает*/
     
@@ -359,6 +419,44 @@ void getCommandFromPort3(std::string& CommandFromPort)
         case 6:
                 std::cout << "step case 6" << std::endl;
             break;
+        case 9:
+            char numberTask = (char)120;
+            if(findInVector(myVec2, numberTask).first == true){
+                // int index = findInVector(myVec, numberTask).second;
+                // cout << "index = findInVector= " << index << endl;
+                // myVec.erase(myVec.begin() + index -1);
+                // //auto itMap = myMap.begin();///создаем итератор на начало myМap
+                // auto itMap = myMap.find(numberTask);
+                // myMap.erase(itMap);
+
+                auto itmyVec2 = find(myVec2.begin(), myVec2.end(), numberTask);
+                myVec2.erase(itmyVec2);
+                    cout << "myVec2.size() " << myVec2.size() << endl;
+                //myVec2.erase(itmyVec2);
+                  //  cout << "myVec2.size() " << myVec2.size() << endl;
+                myVec2.shrink_to_fit();
+
+                // auto index = findInVector(myVec2, numberTask).second;
+                // cout << "index = findInVector2= " << index << endl;
+                // cout << "myVec2.size() " << myVec2.size() << endl;
+                // //myVec2.erase(myVec2.begin() + index, myVec2.begin() + index+1);
+                // myVec2.erase(myVec2.begin() + index);
+                // cout << "myVec2.size() " << myVec2.size() << endl;
+                // myVec2.shrink_to_fit();
+                //                 myVec2.erase(myVec2.begin() + index);
+                // cout << "myVec2.size() " << myVec2.size() << endl;
+                // myVec2.shrink_to_fit();
+                //myVec2.resize(myVec2.size());
+
+
+                // std::map<char,int>::iterator iter;
+                // iter=myMap.find(numberTask);
+                // myMap.erase(iter);
+            }else{
+                printf("\n-------kosyak------\n");
+            }
+        break;
+        /*
         case CMD_HAL_STOP_TS_TASK:
         	    printf("Command: stop TIMESIGNAL task\n");
             int res = TCP_EC_SUCCESS;
@@ -376,14 +474,90 @@ void getCommandFromPort3(std::string& CommandFromPort)
             //int cnt = send_packet(&ans);
             delete[] ans.buff;
             break;
+*/
     }
 }
 
+void process_buffer(char* buf, int len, TCPSocket * ptrSock)
+{
+    ptrSock->send("Hello",sizeof("Hello"));
+    if (!buf) return;
+        //как минимум 2 по 4 байта (команда и длина)
+    if (len < 8) return;
+    tcp_packet_t packet;
+    memset(&packet, 0x00, sizeof(tcp_packet_t));
+    memcpy((char*)&packet.command, &buf[0], sizeof(packet.command));
+    memcpy((char*)&packet.length, &buf[sizeof(packet.command)], sizeof(packet.length));
+    if ((len-8) > 0){
+	packet.buff = new char[len-8];
+        memcpy(&packet.buff[0], &buf[sizeof(packet.command)+sizeof(packet.length)], len-8);
+    }
+    switch (packet.command){
+        case CMD_HAL_STOP_TS_TASK:{
+            	    printf("Command: stop TIMESIGNAL task\n");
+            int res = TCP_EC_SUCCESS;
+            // if (ts_task != NULL){
+            // ts_task->stop();
+            // }
+            //заслать ответ
+            tcp_packet_t ans;
+            memset(&ans, 0x00, sizeof(tcp_packet_t));
+            ans.command = CMD_ANSWER;
+            ans.length = sizeof(ans.command)+sizeof(int);
+            ans.buff = new char[ans.length];
+            memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+            memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(int));
+            //int cnt = send_packet(&ans);
+            int cnt = ptrSock->send(&ans,sizeof(ans));
+            //int cnt = ptrSock->send(&ans,sizeof(ans));
+            delete[] ans.buff;
+            break;
+        }
+    }
+    // sSend2+=clt_sock->send(&TempBuf[0], counter);
+}
+
+void call_resultTask(TCPSocket * ptrSock2){
+    while(1){
+    //ptrSock2->send(&myVec,myVec.size());
+    //ptrSock2->send(&myMap,myMap.size());
+    //csLock.enable ();
+    //CriticalSectionLock lock;
+    // for (auto it = myMap.begin(); it != myMap.end(); ++it){
+    //     // cout << it->first << " : " << it->second << endl;
+    //     ptrSock2->send(&it->first, 1);
+    //     ptrSock2->send(&it->second, 1);
+    //     cout << it->first << endl;
+    //     cout << it->second << endl;
+        
+    // }
+    myVec2.shrink_to_fit();
+    cout << "c_rT myVec2.size()=" << myVec2.size()<< endl;
+   
+    myVec2.shrink_to_fit();
+
+    if(myVec2.size() !=0 ){
+        int sendBytes=ptrSock2->send(&myVec2, myVec2.size());
+         cout << "c_rT sendBytes=" << sendBytes << endl;
+            for (auto it = myVec2.begin(); it != myVec2.end(); ++it){
+            // cout << it->first << " : " << it->second << endl;
+            //ptrSock2->send(&it, 1);
+            cout << *it<< endl;
+            
+        }
+    }
+    //csLock.disable();
+    //CriticalSectionLock unlock;
+    cout << " =========== " << endl;
+    wait(5);
+    }
+
+}
+
+
 int main()
 {
-    printf("\n======== 1-start ======================\n");
-    fflush(stdout);
-
+    printf("\n======== 1-start ======================\n");  fflush(stdout);
     printf("Basic HTTP server example\n");
 
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
@@ -397,6 +571,7 @@ int main()
     drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
     spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
     sockSendThread.start(call_sockSendThread);  //send data in ethernet port to client
+    
 
     int resEth = ethernetInterfaceInit();
 
@@ -410,8 +585,9 @@ int main()
         clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
             printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
          flagMainThread=true;
+         process_buffer(Recv_msv, 100, clt_sock);
     }
-
+resultTaskThread.start(call_resultTask, clt_sock);
     while(flagMainThread) {
 
         // srv.accept(&clt_sock, &clt_addr);
@@ -422,10 +598,54 @@ int main()
         strRecv_msv=Recv_msv;
 
         getCommandFromPort3(strRecv_msv);
+
+
+
+    myMap.emplace(stoi(strRecv_msv),0);
+    myVec.emplace_back(stoi(strRecv_msv));
+    
+    myVec2.emplace_back(stoi(strRecv_msv));
+    myVec2.emplace_back(0);
+
+    if (!buf.full()) {
+        buf.push(stoi(strRecv_msv));
+        buf.push(0);
+
+        bytes_written +=2;
+    }
+
+    // for (auto it = myMap.begin(); it != myMap.end(); ++it)
+    // {
+    //     cout << it->first << " : " << it->second << endl;
+    // }
+    // cout << " =========== " << endl;
+
+    // for (auto it = myVec.begin(); it != myVec.end(); ++it)
+    // {
+    //     cout << *it << endl;
+    // }
+    // cout << " =========== " << endl;
+
+    // findInVector(myVec, (char)43);
+    // cout << findInVector(myVec, (char)43).first << endl;
+    // cout << findInVector(myVec, (char)43).second << endl;
+    // cout << " =========== " << endl;
     }
     //}
 }
 
+/*
+  map <string,int> myFirstMap = {{ "Mother", 37 },
+                                 { "Father", 40 },///map явно инициализирована
+                                 { "Brother", 15 },
+                                 { "Sister", 20 }};
+ 
+  ///вывод явно инициализированной map на экран
+  for (auto it = myFirstMap.begin(); it != myFirstMap.end(); ++it)
+  {
+      cout << it->first << " : " << it->second << endl;
+  }
+*/
 /*
 
         queue<string> myQueue;     // создаем пустую очередь типа string
