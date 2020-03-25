@@ -19,6 +19,7 @@ struct1
 #include "socket_struct.h"
 #include <map>    //подключили библиотеку для работы с map
 #include <algorithm>
+#include "createport.h"
 
 #include "rtos/Thread.h"
 //#include "rtos/rtos_idle.h"
@@ -47,6 +48,8 @@ uint32_t bytes_written = 0;
 #define SIZE_MAINBUFFER 200000
 char MainBuffer[SIZE_MAINBUFFER];
 
+char Recv_msv150[100];
+
 uint32_t counterDRDY=0;
 int32_t counterFLAG=0;
 int numberBytesTakenFromSPI=0;
@@ -70,10 +73,11 @@ InterruptIn drdyIN(PE_3);
 Thread spiThread;
 Thread sockSendThread;
 Thread resultTaskThread;
+Thread portThread150;
 
-TCPSocket srv;  //TCPServer was migrate to TCPSocket
-TCPSocket *clt_sock;
-SocketAddress clt_addr;
+TCPSocket srv, srv120;  //TCPServer was migrate to TCPSocket
+TCPSocket *clt_sock, *clt_sock120;
+SocketAddress clt_addr, clt_addr120;
 EthernetInterface eth;
 EventFlags eventFlags;
 // CriticalSectionLock csLock;
@@ -86,7 +90,7 @@ CircBuff *CircBuffer= new CircBuff();
 
     map <char, char> myMap;
     vector <char> myVec;
-    vector<char> myVec2;
+    vector<string> myVec2;
 
 template < typename T>
 std::pair<bool, char > findInVector(const std::vector<T>  & vecOfElements, const T  & element)
@@ -270,6 +274,12 @@ int ethernetInterfaceInit()
         int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
         printf("rett: %d\r\n",rett);
 
+        srv120.open(&eth);                         /* Open the server on ethernet stack */
+        int rrr120 = srv120.bind(eth.get_ip_address(), 120);     /* Bind the HTTP port (TCP 80) to the server */
+        printf("rrr120: %d\r\n",rrr120);
+        int rett120 = srv120.listen(5);                          /* Can handle 5 simultaneous connections */
+        printf("rett120: %d\r\n",rett120);
+
         return 0;
     }
     return -2;
@@ -330,7 +340,7 @@ void getCommandFromPort(char* ptr_recv_msv)
 
     }
 }
-
+/*
 void deleteTask(){
     char numberTask = (char)120;
     if(findInVector(myVec, numberTask).first == true){
@@ -347,7 +357,7 @@ void deleteTask(){
     }
 
 }
-
+*/
 void getCommandFromPort3(std::string& CommandFromPort)
 {
     int32_t numberCase=0;
@@ -356,13 +366,13 @@ void getCommandFromPort3(std::string& CommandFromPort)
     string strGetDataSPI="2";
     string strStopGetDataSPI="4";
     string strDate="date";
-    string deleteTasks="9";
+    string deleteTasks="49";
 
     if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
     if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
     if (CommandFromPort.compare(0,strDate.size(), strDate) == 0){numberCase=6; printf("case 6\n");}
     if(std::stoi(CommandFromPort) == CMD_HAL_STOP_TS_TASK){numberCase = CMD_HAL_STOP_TS_TASK;}
-    if (CommandFromPort.compare(0,deleteTasks.size(), deleteTasks) == 0){numberCase=9; printf("case 9\n");}
+    if (CommandFromPort.compare(0,deleteTasks.size(), deleteTasks) == 0){numberCase=49; printf("case 49\n");}
 
     /* обнулить входящий массив после того как он отработает*/
     
@@ -419,9 +429,37 @@ void getCommandFromPort3(std::string& CommandFromPort)
         case 6:
                 std::cout << "step case 6" << std::endl;
             break;
-        case 9:
+        case 49:
             char numberTask = (char)120;
-            if(findInVector(myVec2, numberTask).first == true){
+
+            //vector<string>::iterator iter = std::find(myVec2.begin(), myVec2.end(), "120\n");
+
+
+
+                //             //auto itmyVec2 = std::find(myVec2.begin(), myVec2.end(), numberTask2);
+                //             std::cout << "cccase 9 1 " << std::endl;
+                //             std::cout << "itmyVec2 " << *itmyVec2 << std::endl;
+                // myVec2.erase(itmyVec2);
+                // std::cout << "cccase 9 2 " << std::endl;
+                //     cout << "myVec2.size() " << myVec2.size() << endl;
+                // myVec2.erase(itmyVec2);
+                //    cout << "myVec2.size() " << myVec2.size() << endl;
+                // myVec2.shrink_to_fit();
+            //if(findInVector(myVec2, numberTask).first == true){
+            if(findInVector(myVec, numberTask).first == true){
+                    // string found!
+                    auto itmyVec = std::find(myVec.begin(), myVec.end(), numberTask);
+                    myVec.erase(itmyVec);
+                        cout << "myVec.size() " << myVec.size() << endl;
+                    myVec.erase(itmyVec);
+                    cout << "myVec.size() " << myVec.size() << endl;
+                    myVec.shrink_to_fit();
+    for (auto it = myVec.begin(); it != myVec.end(); ++it)
+    {
+        cout << " =  " << *it << endl;
+    }
+    cout << " =========== " << endl;
+
                 // int index = findInVector(myVec, numberTask).second;
                 // cout << "index = findInVector= " << index << endl;
                 // myVec.erase(myVec.begin() + index -1);
@@ -429,12 +467,20 @@ void getCommandFromPort3(std::string& CommandFromPort)
                 // auto itMap = myMap.find(numberTask);
                 // myMap.erase(itMap);
 
-                auto itmyVec2 = find(myVec2.begin(), myVec2.end(), numberTask);
-                myVec2.erase(itmyVec2);
-                    cout << "myVec2.size() " << myVec2.size() << endl;
-                //myVec2.erase(itmyVec2);
-                  //  cout << "myVec2.size() " << myVec2.size() << endl;
-                myVec2.shrink_to_fit();
+                //auto itmyVec2 = find(myVec2.begin(), myVec2.end(), numberTask);
+
+
+
+                // numberTask2 = "9";
+                // auto index = findInVector(myVec2, numberTask2).second;
+                //     cout << "index = findInVector= " << index << endl;
+
+                // auto itmyVec3 = find(myVec2.begin(), myVec2.end(), numberTask);
+                // myVec2.erase(itmyVec3);
+                //     cout << "myVec2.size() " << myVec2.size() << endl;
+                // myVec2.erase(itmyVec3);
+                //    cout << "myVec2.size() " << myVec2.size() << endl;
+                // myVec2.shrink_to_fit();
 
                 // auto index = findInVector(myVec2, numberTask).second;
                 // cout << "index = findInVector2= " << index << endl;
@@ -531,15 +577,15 @@ void call_resultTask(TCPSocket * ptrSock2){
     //     cout << it->second << endl;
         
     // }
-    myVec2.shrink_to_fit();
-    cout << "c_rT myVec2.size()=" << myVec2.size()<< endl;
+    myVec.shrink_to_fit();
+    cout << "c_rT myVec.size()=" << myVec.size()<< endl;
    
-    myVec2.shrink_to_fit();
+    myVec.shrink_to_fit();
 
-    if(myVec2.size() !=0 ){
-        int sendBytes=ptrSock2->send(&myVec2, myVec2.size());
+    if(myVec.size() !=0 ){
+        int sendBytes=ptrSock2->send(&myVec, myVec.size());
          cout << "c_rT sendBytes=" << sendBytes << endl;
-            for (auto it = myVec2.begin(); it != myVec2.end(); ++it){
+            for (auto it = myVec.begin(); it != myVec.end(); ++it){
             // cout << it->first << " : " << it->second << endl;
             //ptrSock2->send(&it, 1);
             cout << *it<< endl;
@@ -554,12 +600,29 @@ void call_resultTask(TCPSocket * ptrSock2){
 
 }
 
+void call_portThread150(){
+		CreatePort *port150 = new CreatePort();
+        port150->ethernetInterfaceInit();
+        port150->ethernetPort();
+		while(1){
+			port150->clt_sock150->recv(Recv_msv150, 100);
+            printf("Recv recv_msv 150 %s \n", Recv_msv150);
+            printf("strlen Recv_msv 150 =%d\n", strlen(Recv_msv150));
+			//strRecv_msv=Recv_msv;
+
+        //getCommandFromPort3(strRecv_msv);
+
+        //myVec.emplace_back(stoi(strRecv_msv));
+        //myVec.emplace_back(0);
+		}
+}
 
 int main()
 {
     printf("\n======== 1-start ======================\n");  fflush(stdout);
     printf("Basic HTTP server example\n");
-
+    portThread150.start(call_portThread150);
+wait(30);
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
     int r;
@@ -578,6 +641,7 @@ int main()
     char Recv_msv[100];                  /* buffer for command from port */
     string strRecv_msv;                  /* buffer for command from port */
     //while(1){
+    char Recv_msv120[100];                  /* buffer for command from port */
 
     if(resEth==0){
         //srv.accept(&clt_sock, &clt_addr);
@@ -586,33 +650,38 @@ int main()
             printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
          flagMainThread=true;
          process_buffer(Recv_msv, 100, clt_sock);
+
+        clt_sock120 = srv120.accept();  //return pointer of a client socket
+        clt_sock120->getpeername(&clt_addr120);  //this will fill address of client to the SocketAddress object
+            printf("\naccept %s:%d\n", clt_addr120.get_ip_address(), clt_addr120.get_port());
     }
-resultTaskThread.start(call_resultTask, clt_sock);
+    
+    resultTaskThread.start(call_resultTask, clt_sock);
+    
     while(flagMainThread) {
 
         // srv.accept(&clt_sock, &clt_addr);
         //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-        clt_sock->recv(&Recv_msv, 100);
+        clt_sock->recv(Recv_msv, 100);
             printf("Recv recv_msv %s \n", Recv_msv);
             printf("strlen Recv_msv =%d\n", strlen(Recv_msv));
+                    clt_sock120->recv(Recv_msv120, 100);
+                    printf("Recv recv_msv120 %s \n", Recv_msv120);
         strRecv_msv=Recv_msv;
 
         getCommandFromPort3(strRecv_msv);
 
+        myVec.emplace_back(stoi(strRecv_msv));
+        myVec.emplace_back(0);
 
 
-    myMap.emplace(stoi(strRecv_msv),0);
-    myVec.emplace_back(stoi(strRecv_msv));
+
+    //printf("stoi(9) =%d\n", stoi("9"));
     
-    myVec2.emplace_back(stoi(strRecv_msv));
-    myVec2.emplace_back(0);
+    // myVec2.emplace_back(stoi(strRecv_msv));
+    // myVec2.emplace_back(0);
+    // printf("stoi(9) =%d\n", stoi("9"));
 
-    if (!buf.full()) {
-        buf.push(stoi(strRecv_msv));
-        buf.push(0);
-
-        bytes_written +=2;
-    }
 
     // for (auto it = myMap.begin(); it != myMap.end(); ++it)
     // {
