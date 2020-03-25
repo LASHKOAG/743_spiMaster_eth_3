@@ -52,6 +52,7 @@ char MainBuffer[SIZE_MAINBUFFER];
 char Recv_msv150[100];
 char Recv_msvTest[100];
 char Recv_msvTest2[100];
+char Recv_msvTest3[100];
 
 uint32_t counterDRDY=0;
 int32_t counterFLAG=0;
@@ -86,6 +87,7 @@ EventFlags eventFlags;
 
 Thread port80;
 Thread port150;
+Thread port200;
 // CriticalSectionLock csLock;
 
 
@@ -120,7 +122,7 @@ int ethernetInterfaceInit()
         // int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
         // printf("rett: %d\r\n",rett);
 
-        // srv120.open(&eth);                         /* Open the server on ethernet stack */
+         srv150.open(&eth);                         /* Open the server on ethernet stack */
         // int rrr120 = srv120.bind(eth.get_ip_address(), 120);     /* Bind the HTTP port (TCP 80) to the server */
         // printf("rrr120: %d\r\n",rrr120);
         // int rett120 = srv120.listen(5);                          /* Can handle 5 simultaneous connections */
@@ -154,13 +156,23 @@ void call_port150(){
             printf("rrr150: %d\r\n",rrr150);
         int rett150 = srv150.listen(3);                          /* Can handle 5 simultaneous connections */
             printf("rett150: %d\r\n",rett150);
-        clt_sock150 = srv.accept();  //return pointer of a client socket
+        clt_sock150 = srv150.accept();  //return pointer of a client socket
         clt_sock150->getpeername(&clt_addr150);  //this will fill address of client to the SocketAddress object
             printf("\naccept %s:%d\n", clt_addr150.get_ip_address(), clt_addr150.get_port());
     while(1){
         clt_sock150->recv(Recv_msvTest2, 100);
             printf("Recv recv_msv2 %s \n", Recv_msvTest2);
             printf("strlen Recv_msv2 =%d\n", strlen(Recv_msvTest2));
+    }
+}
+
+void call_port200(){
+    CreatePort *port200 = new CreatePort(eth);
+    port200->ethernetInterfaceInit(eth);
+    while(1){
+        port200->clt_sock200->recv(Recv_msvTest3, 100);
+            printf("3 Recv recv_msv3 %s \n", Recv_msvTest3);
+            printf("3 strlen Recv_msv3 =%d\n", strlen(Recv_msvTest3));
     }
 }
 /*
@@ -204,6 +216,7 @@ int main()
 
     port80.start(call_port80);
     //port150.start(call_port150);
+    port200.start(call_port200);
 
     char Recv_msv[100];                  /* buffer for command from port */
     string strRecv_msv;                  /* buffer for command from port */

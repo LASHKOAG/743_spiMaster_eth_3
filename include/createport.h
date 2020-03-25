@@ -9,14 +9,14 @@
 class CreatePort
 {
 public:
-    CreatePort();
+    CreatePort(EthernetInterface );
     ~CreatePort();
-    TCPSocket srv150;  //TCPServer was migrate to TCPSocket
-    TCPSocket *clt_sock150;
-    SocketAddress clt_addr150;
-    EthernetInterface eth150;
+    TCPSocket srv200;  //TCPServer was migrate to TCPSocket
+    TCPSocket *clt_sock200;
+    SocketAddress clt_addr200;
+    EthernetInterface eth200;
 
-    int ethernetInterfaceInit();
+    int ethernetInterfaceInit(EthernetInterface ptreth);
     int ethernetPort();
 };
 #endif // CREATEPORT_H
