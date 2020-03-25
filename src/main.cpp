@@ -1,7 +1,7 @@
 /*
 743 spi master eth 3
-struct1
-добавим файл структур
+ports
+threads
 */
 
 #include "mbed.h"
@@ -28,6 +28,7 @@ struct1
 #include "platform/CircularBuffer.h"
 
 #define BUF_SIZE    400
+#define MEMP_NUM_NETCONN 8
 
 CircularBuffer<int, BUF_SIZE> buf;
 uint32_t bytes_written = 0;
@@ -49,6 +50,8 @@ uint32_t bytes_written = 0;
 char MainBuffer[SIZE_MAINBUFFER];
 
 char Recv_msv150[100];
+char Recv_msvTest[100];
+char Recv_msvTest2[100];
 
 uint32_t counterDRDY=0;
 int32_t counterFLAG=0;
@@ -75,181 +78,24 @@ Thread sockSendThread;
 Thread resultTaskThread;
 Thread portThread150;
 
-TCPSocket srv, srv120;  //TCPServer was migrate to TCPSocket
-TCPSocket *clt_sock, *clt_sock120;
-SocketAddress clt_addr, clt_addr120;
-EthernetInterface eth;
+TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
+TCPSocket *clt_sock, *clt_sock150;
+SocketAddress clt_addr, clt_addr150;
+EthernetInterface eth, eth150;
 EventFlags eventFlags;
+
+Thread port80;
+Thread port150;
 // CriticalSectionLock csLock;
 
-CircBuff *CircBuffer= new CircBuff();
-//CircBuffer->initStructCircularBuffer();
-// struct structBuffer{
-//     int8_t MainBuffer[sizeMainBuffer];
-// }structBuff;
 
     map <char, char> myMap;
     vector <char> myVec;
     vector<string> myVec2;
 
-template < typename T>
-std::pair<bool, char > findInVector(const std::vector<T>  & vecOfElements, const T  & element)
-{
-    std::pair<bool, char > result;
-
-    // Find given element in vector
-    auto it = std::find(vecOfElements.begin(), vecOfElements.end(), element);
-
-    if (it != vecOfElements.end())
-    {
-        result.second = distance(vecOfElements.begin(), it);
-        result.first = true;
-    }
-    else
-    {
-        result.first = false;
-        result.second = -1;
-    }
-
-    return result;
-}
-
-int8_t onOffLed()                                             // function for check
-{
-    DigitalOut led3(LED3);
-    for(int i=0; i<100; ++i) {
-        led3 = !led3;
-        wait_ms(100);
-    }
-    return 0;
-}
 
 
-void drdyINHandlerRise()                                        //set flag after interrupt drdy
-{
-    eventFlags.set(DRDY_IN_FLAG);
-}
 
-void call_sockSendThread()
-{
-    int sizeTempBuf=100;
-    char TempBuf[sizeTempBuf];
-    int counter=0;
-    bool flagSendFirstPartToEth=true;
-    int step=0;
-
-    while(1) {
-        if(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)) {
-            step=1;
-        }
-
-        switch (step) {
-            case 1:
-                while(flagSendFirstPartToEth) {
-                    for(counter; counter<sizeTempBuf; ) {
-                        if(flagEndOfMeasurementSPI==false) {
-                            flagSendFirstPartToEth=false;
-                            step=2;
-                            break;
-                        }
-                        TempBuf[counter]=CircBuffer->getCircularBuffer(MainBuffer, SIZE_MAINBUFFER);
-                        numberBytesSendToEth++;
-                        counter++;
-                    }
-                    wasSend1+=clt_sock->send(&TempBuf[0], counter);
-                    counter=0;
-                }
-            //break;
-
-            case 2:
-                counter=0;
-                int difference=(numberBytesTakenFromSPI - numberBytesSendToEth);
-                if(difference==0) {
-                    break;
-                }
-                //while(difference--){
-                while(difference) {
-                    for(counter; counter<sizeTempBuf; ) {
-                        if(difference==0) {
-                            break;
-                        }
-                        TempBuf[counter]=CircBuffer->getCircularBuffer(MainBuffer, SIZE_MAINBUFFER);
-                        numberBytesSendToEth++;
-                        difference=(numberBytesTakenFromSPI - numberBytesSendToEth);
-                        counter++;
-                    }
-
-                    wasSend2+=clt_sock->send(&TempBuf[0], counter);
-                    counter=0;
-                }
-                counter=0;
-                wasSend1=0;/*для отладки*/
-                wasSend2=0;/*для отладки*/
-                step=0;
-                printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
-                numberBytesSendToEth=0;
-                numberBytesTakenFromSPI=0;
-                flagSendFirstPartToEth=true;
-                CircBuffer->clearCircularBuffer();  /*переставляем индексы кольцевого буффера в начало*/
-                //eventFlags.clear(STOP_PUSH_DATA_TO_ETH_FLAG);
-                break;
-        }
-    }
-}
-
-
-void call_spiThread2()
-{
-    uint32_t read_flags = 0;
-    uint32_t count=0;
-    bool flagEnableGetSPI=true;  /*опрашивать SPI или нет*/
-    char txBufferMsv[3]= {0, };
-    char rxBufferMsv[3]= {0, };
-
-    while(eventFlags.wait_all(GET_DATA_FROM_SPI_FLAG, osWaitForever, false)) {
-        flagEnableGetSPI=true;/* опрашивать SPI */
-        //if(eventFlags.wait_all(STOP_GET_DATA_FROM_SPI_FLAG, osWaitForever, false)){} //flagGetDataSPI=false;
-        //read_flags = eventFlags.wait_any(BUTTON_PRESSED_FLAG); //1)ждем один флаг
-        read_flags = eventFlags.wait_all(DRDY_IN_FLAG | GET_DATA_FROM_SPI_FLAG, osWaitForever, false); //waiting for all flags
-        //printf("count = %u\n", count);
-        chipSelect = 0; // Select device
-        spi.write(txBufferMsv, 3, rxBufferMsv, 3);
-        chipSelect = 1; // Deselect device
-        //for test master get reference samples from slave
-        // for(uint8_t i=0; i<3; ++i){
-        //     printf("rxBufferMsv[%d] = %d \n", i, rxBufferMsv[i]);
-        // }
-        if(flagGetDataSPI==false) {
-            /*Сигнал о прекращении опроса по SPI может поступить
-             как в цикле for (ниже), так и до наступления момента входа в этот цикл.
-             Без этого куска кода в массив прибавится Байт*/
-            numberBytesTakenFromSPI=count;
-            count=0;  //printf("STEP 2 \n");fflush(stdout);
-            eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
-            //eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
-            flagEnableGetSPI =false; /*опрашивать SPI или нет*/
-        }
-
-        if(flagEnableGetSPI) {
-            for(uint8_t i=0; i<3; i++) { //24bit ADC
-                //VectorBytes.push_back(rxBufferMsv[i]);
-                CircBuffer->putCircularBuffer(MainBuffer, SIZE_MAINBUFFER, rxBufferMsv[i]);
-                if(i==1) {
-                    eventFlags.set(READY_TO_SEND_DATA_FLAG);   /*чтобы READ из буфера в порт не стартовал раньше WRITE в буфер данных*/
-                }
-
-                count++;        /*пояснение к абзацу выше: здесь может в массив прибавится тот самый Байт*/
-                if(flagGetDataSPI==false) {
-                    numberBytesTakenFromSPI=count;
-                    count=0;  //printf("STEP 2 \n");fflush(stdout);
-                    eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
-                    //eventFlags.set(MAINBUFFER_READY_FROM_SPI_FLAG);  //printf("STEP 3 \n");fflush(stdout);
-                    break;
-                }
-            }
-        }
-    }
-}
 
 int ethernetInterfaceInit()
 {
@@ -269,337 +115,55 @@ int ethernetInterfaceInit()
         printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
         
         srv.open(&eth);                         /* Open the server on ethernet stack */
-        int rrr = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
-        printf("rrr: %d\r\n",rrr);
-        int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
-        printf("rett: %d\r\n",rett);
+        // int rrr = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
+        // printf("rrr: %d\r\n",rrr);
+        // int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
+        // printf("rett: %d\r\n",rett);
 
-        srv120.open(&eth);                         /* Open the server on ethernet stack */
-        int rrr120 = srv120.bind(eth.get_ip_address(), 120);     /* Bind the HTTP port (TCP 80) to the server */
-        printf("rrr120: %d\r\n",rrr120);
-        int rett120 = srv120.listen(5);                          /* Can handle 5 simultaneous connections */
-        printf("rett120: %d\r\n",rett120);
+        // srv120.open(&eth);                         /* Open the server on ethernet stack */
+        // int rrr120 = srv120.bind(eth.get_ip_address(), 120);     /* Bind the HTTP port (TCP 80) to the server */
+        // printf("rrr120: %d\r\n",rrr120);
+        // int rett120 = srv120.listen(5);                          /* Can handle 5 simultaneous connections */
+        // printf("rett120: %d\r\n",rett120);
 
         return 0;
     }
     return -2;
 }
 
-void getCommandFromPort(char* ptr_recv_msv)
-{
-    int32_t valueFromCommand = ptr_recv_msv[0]-0x30;
-    /* обнулить входящий массив после того как он отработает*/
-    switch (valueFromCommand) {
-        case 2:
-            printf("\nget command from port: %d\n", valueFromCommand);
-            fflush(stdout);
-            eventFlags.set(GET_DATA_FROM_SPI_FLAG);
-            eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
-            flagGetDataSPI=true;
-            flagEndOfMeasurementSPI=true;
-            break;
-        case 3:
-            printf("\nget command from port: %d \n", valueFromCommand);
-            fflush(stdout);
-            printf("\n onOffLed() function has to work!\n");
-            fflush(stdout);
-            onOffLed();
-            break;
-        case 4:
-            printf("\nget command %d from port\n", valueFromCommand);
-            fflush(stdout);
-            flagEndOfMeasurementSPI=false;
-            //eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
-            eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
-            eventFlags.clear(READY_TO_SEND_DATA_FLAG);
-            flagGetDataSPI=false;
-            //printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
-            //printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
-            //printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);
-            fflush(stdout);
-            //printf("bool test1=%d \n",test1);fflush(stdout);
-            printf("============================ \n");
-            fflush(stdout);
-            //printf("numberBytesSendToEth %d \n",numberBytesSendToEth);fflush(stdout);
-            //printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
-            //printf("wasSendAll=%d \n",wasSendAll);fflush(stdout);
-            break;
-        case 5:
-            printf("\nget command %d from port\n", valueFromCommand);
-            fflush(stdout);
-            printf("\n port close()\n");
-            fflush(stdout);
 
 
-            // srv.close();
-            // //eth.
-            // eth.disconnect();
-            // flag1=false;
-            // wait(120);
-            break;
+void call_port80(){
+        int rrr80 = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
+        printf("rrr80: %d\r\n",rrr80);
+        int rett80 = srv.listen(3);                          /* Can handle 5 simultaneous connections */
+        printf("rett80: %d\r\n",rett80);
+        clt_sock = srv.accept();  //return pointer of a client socket
+        clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
+            printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+    while(1){
+        clt_sock->recv(Recv_msvTest, 100);
+            printf("Recv recv_msv %s \n", Recv_msvTest);
+            printf("strlen Recv_msv =%d\n", strlen(Recv_msvTest));
+    }
+}
 
+void call_port150(){
+        int rrr150 = srv150.bind(eth.get_ip_address(), 150);     /* Bind the HTTP port (TCP 80) to the server */
+            //int rrr150 = srv.bind("192.168.4.177", 150);  
+            printf("rrr150: %d\r\n",rrr150);
+        int rett150 = srv150.listen(3);                          /* Can handle 5 simultaneous connections */
+            printf("rett150: %d\r\n",rett150);
+        clt_sock150 = srv.accept();  //return pointer of a client socket
+        clt_sock150->getpeername(&clt_addr150);  //this will fill address of client to the SocketAddress object
+            printf("\naccept %s:%d\n", clt_addr150.get_ip_address(), clt_addr150.get_port());
+    while(1){
+        clt_sock150->recv(Recv_msvTest2, 100);
+            printf("Recv recv_msv2 %s \n", Recv_msvTest2);
+            printf("strlen Recv_msv2 =%d\n", strlen(Recv_msvTest2));
     }
 }
 /*
-void deleteTask(){
-    char numberTask = (char)120;
-    if(findInVector(myVec, numberTask).first == true){
-        int index = findInVector(myVec, numberTask).second;
-        cout << "index = findInVector= " << index << endl;
-        myVec.erase(myVec.begin() + index -1);
-        myMap.erase(numberTask);
-
-        // std::map<char,int>::iterator iter;
-        // iter=myMap.find(numberTask);
-        // myMap.erase(iter);
-    }else{
-        printf("\n-------kosyak------\n");
-    }
-
-}
-*/
-void getCommandFromPort3(std::string& CommandFromPort)
-{
-    int32_t numberCase=0;
-    std::cout << " Command from port <- " << CommandFromPort << std::endl;
-
-    string strGetDataSPI="2";
-    string strStopGetDataSPI="4";
-    string strDate="date";
-    string deleteTasks="49";
-
-    if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
-    if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
-    if (CommandFromPort.compare(0,strDate.size(), strDate) == 0){numberCase=6; printf("case 6\n");}
-    if(std::stoi(CommandFromPort) == CMD_HAL_STOP_TS_TASK){numberCase = CMD_HAL_STOP_TS_TASK;}
-    if (CommandFromPort.compare(0,deleteTasks.size(), deleteTasks) == 0){numberCase=49; printf("case 49\n");}
-
-    /* обнулить входящий массив после того как он отработает*/
-    
-    tcp_packet_t packet;
-
-    switch (numberCase) {
-        case 2:
-            printf("\nget command from port: %s\n", &CommandFromPort);
-            fflush(stdout);
-            eventFlags.set(GET_DATA_FROM_SPI_FLAG);
-            eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
-            flagGetDataSPI=true;
-            flagEndOfMeasurementSPI=true;
-            break;
-        case 3:
-            printf("\nget command from port: %s \n", &CommandFromPort);
-            fflush(stdout);
-            printf("\n onOffLed() function has to work!\n");
-            fflush(stdout);
-            onOffLed();
-            break;
-        case 4:
-            printf("\nget command %s from port\n", &CommandFromPort);
-            fflush(stdout);
-            flagEndOfMeasurementSPI=false;
-            //eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
-            eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
-            eventFlags.clear(READY_TO_SEND_DATA_FLAG);
-            flagGetDataSPI=false;
-            //printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
-            //printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
-            //printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);
-            fflush(stdout);
-            //printf("bool test1=%d \n",test1);fflush(stdout);
-            printf("============================ \n");
-            fflush(stdout);
-            //printf("numberBytesSendToEth %d \n",numberBytesSendToEth);fflush(stdout);
-            //printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
-            //printf("wasSendAll=%d \n",wasSendAll);fflush(stdout);
-            break;
-        case 5:
-            printf("\nget command %s from port\n", &CommandFromPort);
-            fflush(stdout);
-            printf("\n port close()\n");
-            fflush(stdout);
-
-
-            // srv.close();
-            // //eth.
-            // eth.disconnect();
-            // flag1=false;
-            // wait(120);
-            break;
-        case 6:
-                std::cout << "step case 6" << std::endl;
-            break;
-        case 49:
-            char numberTask = (char)120;
-
-            //vector<string>::iterator iter = std::find(myVec2.begin(), myVec2.end(), "120\n");
-
-
-
-                //             //auto itmyVec2 = std::find(myVec2.begin(), myVec2.end(), numberTask2);
-                //             std::cout << "cccase 9 1 " << std::endl;
-                //             std::cout << "itmyVec2 " << *itmyVec2 << std::endl;
-                // myVec2.erase(itmyVec2);
-                // std::cout << "cccase 9 2 " << std::endl;
-                //     cout << "myVec2.size() " << myVec2.size() << endl;
-                // myVec2.erase(itmyVec2);
-                //    cout << "myVec2.size() " << myVec2.size() << endl;
-                // myVec2.shrink_to_fit();
-            //if(findInVector(myVec2, numberTask).first == true){
-            if(findInVector(myVec, numberTask).first == true){
-                    // string found!
-                    auto itmyVec = std::find(myVec.begin(), myVec.end(), numberTask);
-                    myVec.erase(itmyVec);
-                        cout << "myVec.size() " << myVec.size() << endl;
-                    myVec.erase(itmyVec);
-                    cout << "myVec.size() " << myVec.size() << endl;
-                    myVec.shrink_to_fit();
-    for (auto it = myVec.begin(); it != myVec.end(); ++it)
-    {
-        cout << " =  " << *it << endl;
-    }
-    cout << " =========== " << endl;
-
-                // int index = findInVector(myVec, numberTask).second;
-                // cout << "index = findInVector= " << index << endl;
-                // myVec.erase(myVec.begin() + index -1);
-                // //auto itMap = myMap.begin();///создаем итератор на начало myМap
-                // auto itMap = myMap.find(numberTask);
-                // myMap.erase(itMap);
-
-                //auto itmyVec2 = find(myVec2.begin(), myVec2.end(), numberTask);
-
-
-
-                // numberTask2 = "9";
-                // auto index = findInVector(myVec2, numberTask2).second;
-                //     cout << "index = findInVector= " << index << endl;
-
-                // auto itmyVec3 = find(myVec2.begin(), myVec2.end(), numberTask);
-                // myVec2.erase(itmyVec3);
-                //     cout << "myVec2.size() " << myVec2.size() << endl;
-                // myVec2.erase(itmyVec3);
-                //    cout << "myVec2.size() " << myVec2.size() << endl;
-                // myVec2.shrink_to_fit();
-
-                // auto index = findInVector(myVec2, numberTask).second;
-                // cout << "index = findInVector2= " << index << endl;
-                // cout << "myVec2.size() " << myVec2.size() << endl;
-                // //myVec2.erase(myVec2.begin() + index, myVec2.begin() + index+1);
-                // myVec2.erase(myVec2.begin() + index);
-                // cout << "myVec2.size() " << myVec2.size() << endl;
-                // myVec2.shrink_to_fit();
-                //                 myVec2.erase(myVec2.begin() + index);
-                // cout << "myVec2.size() " << myVec2.size() << endl;
-                // myVec2.shrink_to_fit();
-                //myVec2.resize(myVec2.size());
-
-
-                // std::map<char,int>::iterator iter;
-                // iter=myMap.find(numberTask);
-                // myMap.erase(iter);
-            }else{
-                printf("\n-------kosyak------\n");
-            }
-        break;
-        /*
-        case CMD_HAL_STOP_TS_TASK:
-        	    printf("Command: stop TIMESIGNAL task\n");
-            int res = TCP_EC_SUCCESS;
-                // if (ts_task != NULL){
-                // ts_task->stop();
-                // }
-            //заслать ответ
-            tcp_packet_t ans;
-            memset(&ans, 0x00, sizeof(tcp_packet_t));
-            ans.command = CMD_ANSWER;
-            ans.length = sizeof(ans.command)+sizeof(int);
-            ans.buff = new char[ans.length];
-            memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
-            memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(int));
-            //int cnt = send_packet(&ans);
-            delete[] ans.buff;
-            break;
-*/
-    }
-}
-
-void process_buffer(char* buf, int len, TCPSocket * ptrSock)
-{
-    ptrSock->send("Hello",sizeof("Hello"));
-    if (!buf) return;
-        //как минимум 2 по 4 байта (команда и длина)
-    if (len < 8) return;
-    tcp_packet_t packet;
-    memset(&packet, 0x00, sizeof(tcp_packet_t));
-    memcpy((char*)&packet.command, &buf[0], sizeof(packet.command));
-    memcpy((char*)&packet.length, &buf[sizeof(packet.command)], sizeof(packet.length));
-    if ((len-8) > 0){
-	packet.buff = new char[len-8];
-        memcpy(&packet.buff[0], &buf[sizeof(packet.command)+sizeof(packet.length)], len-8);
-    }
-    switch (packet.command){
-        case CMD_HAL_STOP_TS_TASK:{
-            	    printf("Command: stop TIMESIGNAL task\n");
-            int res = TCP_EC_SUCCESS;
-            // if (ts_task != NULL){
-            // ts_task->stop();
-            // }
-            //заслать ответ
-            tcp_packet_t ans;
-            memset(&ans, 0x00, sizeof(tcp_packet_t));
-            ans.command = CMD_ANSWER;
-            ans.length = sizeof(ans.command)+sizeof(int);
-            ans.buff = new char[ans.length];
-            memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
-            memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(int));
-            //int cnt = send_packet(&ans);
-            int cnt = ptrSock->send(&ans,sizeof(ans));
-            //int cnt = ptrSock->send(&ans,sizeof(ans));
-            delete[] ans.buff;
-            break;
-        }
-    }
-    // sSend2+=clt_sock->send(&TempBuf[0], counter);
-}
-
-void call_resultTask(TCPSocket * ptrSock2){
-    while(1){
-    //ptrSock2->send(&myVec,myVec.size());
-    //ptrSock2->send(&myMap,myMap.size());
-    //csLock.enable ();
-    //CriticalSectionLock lock;
-    // for (auto it = myMap.begin(); it != myMap.end(); ++it){
-    //     // cout << it->first << " : " << it->second << endl;
-    //     ptrSock2->send(&it->first, 1);
-    //     ptrSock2->send(&it->second, 1);
-    //     cout << it->first << endl;
-    //     cout << it->second << endl;
-        
-    // }
-    myVec.shrink_to_fit();
-    cout << "c_rT myVec.size()=" << myVec.size()<< endl;
-   
-    myVec.shrink_to_fit();
-
-    if(myVec.size() !=0 ){
-        int sendBytes=ptrSock2->send(&myVec, myVec.size());
-         cout << "c_rT sendBytes=" << sendBytes << endl;
-            for (auto it = myVec.begin(); it != myVec.end(); ++it){
-            // cout << it->first << " : " << it->second << endl;
-            //ptrSock2->send(&it, 1);
-            cout << *it<< endl;
-            
-        }
-    }
-    //csLock.disable();
-    //CriticalSectionLock unlock;
-    cout << " =========== " << endl;
-    wait(5);
-    }
-
-}
-
 void call_portThread150(){
 		CreatePort *port150 = new CreatePort();
         port150->ethernetInterfaceInit();
@@ -616,13 +180,13 @@ void call_portThread150(){
         //myVec.emplace_back(0);
 		}
 }
-
+*/
 int main()
 {
     printf("\n======== 1-start ======================\n");  fflush(stdout);
     printf("Basic HTTP server example\n");
-    portThread150.start(call_portThread150);
-wait(30);
+    //portThread150.start(call_portThread150);
+//wait(30);
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
     int r;
@@ -631,48 +195,51 @@ wait(30);
     //CircBuffer->initStructCircularBuffer();
 
 
-    drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
-    spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
-    sockSendThread.start(call_sockSendThread);  //send data in ethernet port to client
+    //drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
+    //spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
+    //sockSendThread.start(call_sockSendThread);  //send data in ethernet port to client
     
 
     int resEth = ethernetInterfaceInit();
+
+    port80.start(call_port80);
+    //port150.start(call_port150);
 
     char Recv_msv[100];                  /* buffer for command from port */
     string strRecv_msv;                  /* buffer for command from port */
     //while(1){
     char Recv_msv120[100];                  /* buffer for command from port */
+while(1){}
+    // if(resEth==0){
+    //     //srv.accept(&clt_sock, &clt_addr);
+    //     clt_sock = srv.accept();  //return pointer of a client socket
+    //     clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
+    //         printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+    //      flagMainThread=true;
+    //      process_buffer(Recv_msv, 100, clt_sock);
 
-    if(resEth==0){
-        //srv.accept(&clt_sock, &clt_addr);
-        clt_sock = srv.accept();  //return pointer of a client socket
-        clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
-            printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-         flagMainThread=true;
-         process_buffer(Recv_msv, 100, clt_sock);
-
-        clt_sock120 = srv120.accept();  //return pointer of a client socket
-        clt_sock120->getpeername(&clt_addr120);  //this will fill address of client to the SocketAddress object
-            printf("\naccept %s:%d\n", clt_addr120.get_ip_address(), clt_addr120.get_port());
-    }
+    //     clt_sock120 = srv120.accept();  //return pointer of a client socket
+    //     clt_sock120->getpeername(&clt_addr120);  //this will fill address of client to the SocketAddress object
+    //         printf("\naccept %s:%d\n", clt_addr120.get_ip_address(), clt_addr120.get_port());
+    // }
     
-    resultTaskThread.start(call_resultTask, clt_sock);
+    // resultTaskThread.start(call_resultTask, clt_sock);
     
-    while(flagMainThread) {
+    // while(flagMainThread) {
 
-        // srv.accept(&clt_sock, &clt_addr);
-        //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-        clt_sock->recv(Recv_msv, 100);
-            printf("Recv recv_msv %s \n", Recv_msv);
-            printf("strlen Recv_msv =%d\n", strlen(Recv_msv));
-                    clt_sock120->recv(Recv_msv120, 100);
-                    printf("Recv recv_msv120 %s \n", Recv_msv120);
-        strRecv_msv=Recv_msv;
+    //     // srv.accept(&clt_sock, &clt_addr);
+    //     //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+    //     clt_sock->recv(Recv_msv, 100);
+    //         printf("Recv recv_msv %s \n", Recv_msv);
+    //         printf("strlen Recv_msv =%d\n", strlen(Recv_msv));
+    //                 clt_sock120->recv(Recv_msv120, 100);
+    //                 printf("Recv recv_msv120 %s \n", Recv_msv120);
+    //     strRecv_msv=Recv_msv;
 
-        getCommandFromPort3(strRecv_msv);
+    //     getCommandFromPort3(strRecv_msv);
 
-        myVec.emplace_back(stoi(strRecv_msv));
-        myVec.emplace_back(0);
+    //     myVec.emplace_back(stoi(strRecv_msv));
+    //     myVec.emplace_back(0);
 
 
 
@@ -699,7 +266,7 @@ wait(30);
     // cout << findInVector(myVec, (char)43).first << endl;
     // cout << findInVector(myVec, (char)43).second << endl;
     // cout << " =========== " << endl;
-    }
+    //}
     //}
 }
 
