@@ -79,15 +79,17 @@ Thread sockSendThread;
 Thread resultTaskThread;
 Thread portThread150;
 
-TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
-TCPSocket *clt_sock, *clt_sock150;
-SocketAddress clt_addr, clt_addr150;
+// TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
+// TCPSocket *clt_sock, *clt_sock150;
+// SocketAddress clt_addr, clt_addr150;
 EthernetInterface eth, eth150;
 EventFlags eventFlags;
 
 Thread port80;
 Thread port150;
 Thread port200;
+Thread port300;
+Thread port400;
 // CriticalSectionLock csLock;
 
 
@@ -101,7 +103,6 @@ Thread port200;
 
 int ethernetInterfaceInit()
 {
-    //EthernetInterface eth;
     printf("\n======== step EthernetInterfaceFunction() ======================\n");
     fflush(stdout);
     int ret;
@@ -116,13 +117,13 @@ int ethernetInterfaceInit()
         printf("\nstep eth.connect()\n");  fflush(stdout);
         printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
         
-        srv.open(&eth);                         /* Open the server on ethernet stack */
+        //srv.open(&eth); //+                         /* Open the server on ethernet stack */
         // int rrr = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
         // printf("rrr: %d\r\n",rrr);
         // int rett = srv.listen(5);                          /* Can handle 5 simultaneous connections */
         // printf("rett: %d\r\n",rett);
 
-         srv150.open(&eth);                         /* Open the server on ethernet stack */
+         //srv150.open(&eth);  //+                       /* Open the server on ethernet stack */
         // int rrr120 = srv120.bind(eth.get_ip_address(), 120);     /* Bind the HTTP port (TCP 80) to the server */
         // printf("rrr120: %d\r\n",rrr120);
         // int rett120 = srv120.listen(5);                          /* Can handle 5 simultaneous connections */
@@ -130,50 +131,74 @@ int ethernetInterfaceInit()
 
         return 0;
     }
-    return -2;
+    return 0;
 }
 
 
 
-void call_port80(){
-        int rrr80 = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
-        printf("rrr80: %d\r\n",rrr80);
-        int rett80 = srv.listen(3);                          /* Can handle 5 simultaneous connections */
-        printf("rett80: %d\r\n",rett80);
-        clt_sock = srv.accept();  //return pointer of a client socket
-        clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
-            printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+// void call_port80(){
+//         int rrr80 = srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
+//         printf("rrr80: %d\r\n",rrr80);
+//         int rett80 = srv.listen(3);                          /* Can handle 5 simultaneous connections */
+//         printf("rett80: %d\r\n",rett80);
+//         clt_sock = srv.accept();  //return pointer of a client socket
+//         clt_sock->getpeername(&clt_addr);  //this will fill address of client to the SocketAddress object
+//             printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
+//     while(1){
+//         clt_sock->recv(Recv_msvTest, 100);
+//             printf("Recv recv_msv %s \n", Recv_msvTest);
+//             printf("strlen Recv_msv =%d\n", strlen(Recv_msvTest));
+//     }
+// }
+
+// void call_port150(){
+//         int rrr150 = srv150.bind(eth.get_ip_address(), 150);     /* Bind the HTTP port (TCP 80) to the server */
+//             //int rrr150 = srv.bind("192.168.4.177", 150);  
+//             printf("rrr150: %d\r\n",rrr150);
+//         int rett150 = srv150.listen(3);                          /* Can handle 5 simultaneous connections */
+//             printf("rett150: %d\r\n",rett150);
+//         clt_sock150 = srv150.accept();  //return pointer of a client socket
+//         clt_sock150->getpeername(&clt_addr150);  //this will fill address of client to the SocketAddress object
+//             printf("\naccept %s:%d\n", clt_addr150.get_ip_address(), clt_addr150.get_port());
+//     while(1){
+//         clt_sock150->recv(Recv_msvTest2, 100);
+//             printf("Recv recv_msv2 %s \n", Recv_msvTest2);
+//             printf("strlen Recv_msv2 =%d\n", strlen(Recv_msvTest2));
+//     }
+// }
+
+// void call_port200(){
+//     CreatePort *port200 = new CreatePort(eth);
+//     port200->ethernetInterfaceInit(eth);
+//     while(1){
+//         port200->clt_sock200->recv(Recv_msvTest3, 100);
+//             printf("3 Recv recv_msv3 %s \n", Recv_msvTest3);
+//             printf("3 strlen Recv_msv3 =%d\n", strlen(Recv_msvTest3));
+//     }
+// }
+
+void call_port300(){
+    CreatePort *port300 = new CreatePort(eth, 300);
+    port300->get_port();
+    char *ReceivedMsv = new char[100]{0};
     while(1){
-        clt_sock->recv(Recv_msvTest, 100);
-            printf("Recv recv_msv %s \n", Recv_msvTest);
-            printf("strlen Recv_msv =%d\n", strlen(Recv_msvTest));
+        port300->clt_sock->recv(ReceivedMsv, 100);
+            printf("ReceivedMsv port300 = %s \n", ReceivedMsv);
+            printf("strlen ReceivedMsv300 = %d\n", strlen(ReceivedMsv));
     }
+    delete[] ReceivedMsv;
 }
 
-void call_port150(){
-        int rrr150 = srv150.bind(eth.get_ip_address(), 150);     /* Bind the HTTP port (TCP 80) to the server */
-            //int rrr150 = srv.bind("192.168.4.177", 150);  
-            printf("rrr150: %d\r\n",rrr150);
-        int rett150 = srv150.listen(3);                          /* Can handle 5 simultaneous connections */
-            printf("rett150: %d\r\n",rett150);
-        clt_sock150 = srv150.accept();  //return pointer of a client socket
-        clt_sock150->getpeername(&clt_addr150);  //this will fill address of client to the SocketAddress object
-            printf("\naccept %s:%d\n", clt_addr150.get_ip_address(), clt_addr150.get_port());
+void call_port400(){
+    CreatePort *port400 = new CreatePort(eth, 400);
+    port400->get_port();
+    char *ReceivedMsv = new char[100]{0};
     while(1){
-        clt_sock150->recv(Recv_msvTest2, 100);
-            printf("Recv recv_msv2 %s \n", Recv_msvTest2);
-            printf("strlen Recv_msv2 =%d\n", strlen(Recv_msvTest2));
+        port400->clt_sock->recv(ReceivedMsv, 100);
+            printf("ReceivedMsv port400 = %s \n", ReceivedMsv);
+            printf("strlen ReceivedMsv400 = %d\n", strlen(ReceivedMsv));
     }
-}
-
-void call_port200(){
-    CreatePort *port200 = new CreatePort(eth);
-    port200->ethernetInterfaceInit(eth);
-    while(1){
-        port200->clt_sock200->recv(Recv_msvTest3, 100);
-            printf("3 Recv recv_msv3 %s \n", Recv_msvTest3);
-            printf("3 strlen Recv_msv3 =%d\n", strlen(Recv_msvTest3));
-    }
+    delete[] ReceivedMsv;
 }
 /*
 void call_portThread150(){
@@ -214,9 +239,11 @@ int main()
 
     int resEth = ethernetInterfaceInit();
 
-    port80.start(call_port80);
+    //port80.start(call_port80);
     //port150.start(call_port150);
-    port200.start(call_port200);
+    //port200.start(call_port200);
+    port300.start(call_port300);
+     port400.start(call_port400);
 
     char Recv_msv[100];                  /* buffer for command from port */
     string strRecv_msv;                  /* buffer for command from port */
