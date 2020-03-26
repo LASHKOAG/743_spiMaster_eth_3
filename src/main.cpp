@@ -27,6 +27,8 @@ staticMSV ring read-write in parallel
 
 #include "platform/CircularBuffer.h"
 
+
+
 //#define BUF_SIZE    400
 #define MEMP_NUM_NETCONN 8
 
@@ -118,9 +120,17 @@ void drdyINHandlerRise()                                        //set flag after
 
 void call_timeSignalPortThread()
 {
+    bool a=true;
+    bool repeatConnect=false;
+
     CreatePort *port500 = new CreatePort(eth, 500);
     if(port500->flag_AcceptPort==0){ //связь с клиентом установлена
         flagReadyTSPortThread=true;
+    }else{                           //связь с клиентом не установлена
+            printf("Problem with PORT\n");
+        port500->clt_sock->close();
+        while(port500->get_port() !=0){}  //пытаемся переподключиться
+        flagReadyTSPortThread=true;       //связь с клиентом установлена
     }
 
     int sizeTempBuf=100;
@@ -128,7 +138,25 @@ void call_timeSignalPortThread()
     int counter=0;
     bool flagSendFirstPartToEth=true;
     int step=0;
-
+    // while(a){
+    //             //int check = port500->clt_sock->send("CHECK", strlen("CHECK"));
+    //     int check = port500->clt_sock->send("0xFF", strlen("0xFF"));
+    //     printf("check = %d\n", check);
+    //     wait(2);
+    //     if(check<0){               //порт назначения закрыт клиентом
+    //         printf("Problem with PORT\n");
+    //         port500->clt_sock->close();
+    //         //a=false;
+    //                 while(port500->get_port() !=0){}  //пытаемся переподключиться
+    //                 flagReadyTSPortThread=true;
+    //     }
+    // }
+    while(repeatConnect){
+        if(port500->get_port()==0){
+            repeatConnect=false;
+            flagReadyTSPortThread=true;
+        }
+    }
     while(flagReadyTSPortThread) {
         if(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)) {
             step=1;
@@ -148,7 +176,17 @@ void call_timeSignalPortThread()
                         counter++;
                     }
                     //wasSend1+=clt_sock.send(&TempBuf[0], counter);
-                    wasSend1+=port500->clt_sock->send(&TempBuf[0], counter);
+                    int resultSendPort1 = port500->clt_sock->send(&TempBuf[0], counter);
+                    //wasSend1+=port500->clt_sock->send(&TempBuf[0], counter);
+                    // if(resultSendPort1<0){               //порт назначения закрыт клиентом
+                    //         printf("Problem with PORT\n");
+                    //     port500->clt_sock->close();
+                    //     repeatConnect=true;
+                    //     flagSendFirstPartToEth=false;                   //выйти и обнулить всё(не доделал проверить обнуление всего)
+                    //     flagReadyTSPortThread=false;
+
+                    // }
+                    wasSend1+=resultSendPort1;
                     counter=0;
                 }
             //break;
@@ -172,7 +210,16 @@ void call_timeSignalPortThread()
                     }
 
                     //wasSend2+=clt_sock.send(&TempBuf[0], counter);
-                    wasSend2+=port500->clt_sock->send(&TempBuf[0], counter);
+                    int resultSendPort = port500->clt_sock->send(&TempBuf[0], counter);
+                    // if(resultSendPort<0){               //порт назначения закрыт клиентом
+                    //         printf("Problem with PORT\n");
+                    //     port500->clt_sock->close();
+                    //     repeatConnect=true;
+                    //     difference=0;                   //выйти и обнулить всё
+                    //     //flagSendFirstPartToEth=false;                   //выйти и обнулить всё
+                    //     //flagReadyTSPortThread=false;
+                    // }
+                    wasSend2+=resultSendPort;
                     counter=0;
                 }
                 counter=0;
@@ -188,6 +235,7 @@ void call_timeSignalPortThread()
                 break;
         }
     }
+    delete port500;
 }
 
 
@@ -257,7 +305,9 @@ int ethernetInterfaceInit()
         return -1;
     }else{
             printf("\nstep eth.connect()\n");  fflush(stdout);
-            printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
+        const char *ip = eth.get_ip_address();  // Show the network address
+            printf("The Server IP address is: %s\n", ip ? ip : "No IP");  fflush(stdout);
+            //printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
         return 0;
     }
 }
@@ -404,6 +454,9 @@ void call_generalPortThread(){
 int main()
 {
         printf("\n======== 1-start ======================\n");  fflush(stdout);
+    #ifdef MBED_MAJOR_VERSION
+        printf("Mbed OS version: %d.%d.%d\n\n", MBED_MAJOR_VERSION, MBED_MINOR_VERSION, MBED_PATCH_VERSION);
+    #endif
 
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
