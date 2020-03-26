@@ -15,6 +15,23 @@ staticMSV ring read-write in parallel
 #include "hwclockstm.h"
 #include "circbuff.h"
 #include <string>
+//#include <queue>
+#include "socket_struct.h"
+//#include <map>    //подключили библиотеку для работы с map
+#include <algorithm>
+#include "createport.h"
+
+#include "rtos/Thread.h"
+//#include "rtos/rtos_idle.h"
+#include "platform/mbed_critical.h"
+
+#include "platform/CircularBuffer.h"
+
+//#define BUF_SIZE    400
+#define MEMP_NUM_NETCONN 8
+
+//CircularBuffer<int, BUF_SIZE> buf;
+//uint32_t bytes_written = 0;
 
 #define DRDY_IN_FLAG (1U << 0)
 #define GET_DATA_FROM_SPI_FLAG (1U << 1)
@@ -44,20 +61,38 @@ bool test1=false;
 bool flagEndOfMeasurementSPI=true;
 int test2=0;
 int test3=0;
+bool flagMainThread = false;
+bool flagReadyTSPortThread = false;
+bool flagAcceptPort500 = false;
 
+char Recv_msv150[100];
+char Recv_msvTest[100];
+char Recv_msvTest2[100];
+char Recv_msvTest3[100];
 
 SPI spi(PD_7, PA_6, PA_5, PA_4); // mosi, miso, sclk, ssel
 DigitalOut chipSelect(PA_4);
 InterruptIn drdyIN(PE_3);
 
 Thread spiThread;
-Thread sockSendThread;
+Thread timeSignalPortThread;
+Thread resultTaskThread;
+Thread generalPortThread;
+//Thread portThread150;
 
-TCPServer srv;
-TCPSocket clt_sock;
-SocketAddress clt_addr;
+// TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
+// TCPSocket *clt_sock, *clt_sock150;
+// SocketAddress clt_addr, clt_addr150;
 EthernetInterface eth;
 EventFlags eventFlags;
+
+//Thread signalPortThread;
+// CriticalSectionLock csLock;
+
+
+//map <char, char> myMap;
+vector <char> myVec;
+vector<string> myVec2;
 
 CircBuff *CircBuffer= new CircBuff();
 //CircBuffer->initStructCircularBuffer();
@@ -81,15 +116,20 @@ void drdyINHandlerRise()                                        //set flag after
     eventFlags.set(DRDY_IN_FLAG);
 }
 
-void call_sockSendThread()
+void call_timeSignalPortThread()
 {
+    CreatePort *port500 = new CreatePort(eth, 500);
+    if(port500->flag_AcceptPort==0){ //связь с клиентом установлена
+        flagReadyTSPortThread=true;
+    }
+
     int sizeTempBuf=100;
     char TempBuf[sizeTempBuf];
     int counter=0;
     bool flagSendFirstPartToEth=true;
     int step=0;
 
-    while(1) {
+    while(flagReadyTSPortThread) {
         if(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)) {
             step=1;
         }
@@ -107,7 +147,8 @@ void call_sockSendThread()
                         numberBytesSendToEth++;
                         counter++;
                     }
-                    wasSend1+=clt_sock.send(&TempBuf[0], counter);
+                    //wasSend1+=clt_sock.send(&TempBuf[0], counter);
+                    wasSend1+=port500->clt_sock->send(&TempBuf[0], counter);
                     counter=0;
                 }
             //break;
@@ -130,7 +171,8 @@ void call_sockSendThread()
                         counter++;
                     }
 
-                    wasSend2+=clt_sock.send(&TempBuf[0], counter);
+                    //wasSend2+=clt_sock.send(&TempBuf[0], counter);
+                    wasSend2+=port500->clt_sock->send(&TempBuf[0], counter);
                     counter=0;
                 }
                 counter=0;
@@ -202,25 +244,22 @@ void call_spiThread2()
     }
 }
 
-void ethernetInterfaceInit()
+int ethernetInterfaceInit()
 {
-    //EthernetInterface eth;
-    printf("\n======== step EthernetInterfaceFunction() ======================\n");
-    fflush(stdout);
-    int ret;
-    ret = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
-    printf("Set Net: %d\r\n",ret);
-    fflush(stdout);
-
-    eth.connect();
-    printf("\nstep eth.connect()\n");
-    fflush(stdout);
-    printf("The target IP address is '%s'\n", eth.get_ip_address());
-    fflush(stdout);
-
-    srv.open(&eth);                         /* Open the server on ethernet stack */
-    srv.bind(eth.get_ip_address(), 80);     /* Bind the HTTP port (TCP 80) to the server */
-    srv.listen(5);                          /* Can handle 5 simultaneous connections */
+        //EthernetInterface eth;
+        printf("\n======== step EthernetInterfaceFunction() ======================\n");  fflush(stdout);
+        
+    int resultEthSetNetwork = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
+        printf("Set Net: %d\r\n",resultEthSetNetwork);  fflush(stdout);
+    
+    if(0 != eth.connect()) {
+            printf("Error connecting \n");
+        return -1;
+    }else{
+            printf("\nstep eth.connect()\n");  fflush(stdout);
+            printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
+        return 0;
+    }
 }
 
 void getCommandFromPort(char* ptr_recv_msv)
@@ -348,48 +387,36 @@ void getCommandFromPort3(std::string& CommandFromPort)
     }
 }
 
+void call_generalPortThread(){
+    CreatePort *port80 = new CreatePort(eth, 80);
+    char *ReceivedMsv = new char[100]{0};               /* buffer for command from port */
+    string strRecv_msv;
+    while(1){
+        port80->clt_sock->recv(ReceivedMsv, 100);
+            printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
+            printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
+        strRecv_msv=ReceivedMsv;
+        getCommandFromPort3(strRecv_msv);
+    }
+    delete[] ReceivedMsv;
+}
+
 int main()
 {
-    printf("\n======== 1-start ======================\n");
-    fflush(stdout);
-    
-    //CircBuff *CircBuffer= new CircBuff();
-    
-    printf("Basic HTTP server example\n");
+        printf("\n======== 1-start ======================\n");  fflush(stdout);
 
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
-    int r;
-    int res_put;
+    int resEthInit = ethernetInterfaceInit();
+    if(resEthInit<0){printf("Ethernet NO SET\n");  fflush(stdout);}
+    else{  
+        drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
+        spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
 
-    //CircBuffer->initStructCircularBuffer();
-
-
-    drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
-    spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
-    sockSendThread.start(call_sockSendThread);  //send data in ethernet port to client
-
-    ethernetInterfaceInit();
-
-    char Recv_msv[100];                  /* buffer for command from port */
-    string strRecv_msv;                  /* buffer for command from port */
-    //while(1){
-    srv.accept(&clt_sock, &clt_addr);
-    printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-    // flag1=true;
-
-    while(1) {
-
-        // srv.accept(&clt_sock, &clt_addr);
-        //           printf("\naccept %s:%d\n", clt_addr.get_ip_address(), clt_addr.get_port());
-        clt_sock.recv(&Recv_msv, 100);
-            printf("Recv recv_msv %s \n", Recv_msv);
-            printf("strlen Recv_msv =%d\n", strlen(Recv_msv));
-        strRecv_msv=Recv_msv;
-
-        getCommandFromPort3(strRecv_msv);
+        generalPortThread.start(call_generalPortThread);            //get command from general port
+        timeSignalPortThread.start(call_timeSignalPortThread);      //send time Signal in ethernet own separate port to client
     }
-    //}
+    while(1){}
 }
 
 //apArray->goToStartWriteIndex=true;
