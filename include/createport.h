@@ -15,6 +15,7 @@ public:
     TCPSocket *clt_sock;
     SocketAddress clt_addr;
     EthernetInterface ptreth;
+    //Thread t2;
     int PORT;
 
     int get_port();

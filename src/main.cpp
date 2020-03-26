@@ -179,7 +179,7 @@ int ethernetInterfaceInit()
 
 void call_port300(){
     CreatePort *port300 = new CreatePort(eth, 300);
-    port300->get_port();
+    //port300->get_port();
     char *ReceivedMsv = new char[100]{0};
     while(1){
         port300->clt_sock->recv(ReceivedMsv, 100);
@@ -191,11 +191,11 @@ void call_port300(){
 
 void call_port400(){
     CreatePort *port400 = new CreatePort(eth, 400);
-    port400->get_port();
+    //port400->get_port();
     char *ReceivedMsv = new char[100]{0};
     while(1){
         port400->clt_sock->recv(ReceivedMsv, 100);
-            printf("ReceivedMsv port400 = %s \n", ReceivedMsv);
+            printf("\nReceivedMsv port400 = %s ", ReceivedMsv);
             printf("strlen ReceivedMsv400 = %d\n", strlen(ReceivedMsv));
     }
     delete[] ReceivedMsv;
@@ -243,7 +243,7 @@ int main()
     //port150.start(call_port150);
     //port200.start(call_port200);
     port300.start(call_port300);
-     port400.start(call_port400);
+    port400.start(call_port400);
 
     char Recv_msv[100];                  /* buffer for command from port */
     string strRecv_msv;                  /* buffer for command from port */

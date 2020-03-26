@@ -3,6 +3,9 @@
 CreatePort::CreatePort(EthernetInterface ptreth, int port)
 {
     PORT = port;
+    get_port();
+    //t2.start();
+    
 //    TCPSocket srv150;  //TCPServer was migrate to TCPSocket
 //    TCPSocket *clt_sock150;
 //    SocketAddress clt_addr150;
