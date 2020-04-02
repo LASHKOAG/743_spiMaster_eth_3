@@ -20,5 +20,6 @@ public:
     int flag_AcceptPort;
 
     int get_port();
+    int repeatConnect();
 };
 #endif // CREATEPORT_H

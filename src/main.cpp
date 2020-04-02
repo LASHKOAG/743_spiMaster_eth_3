@@ -121,6 +121,7 @@ void call_timeSignalPortThread()
 {
     bool a=true;
     bool repeatConnect=false;
+    bool needRepeatConnect=false;
 
     CreatePort *port500 = new CreatePort(eth, 500);
     if(port500->flag_AcceptPort==0){ //связь с клиентом установлена
@@ -128,8 +129,9 @@ void call_timeSignalPortThread()
     }else{                           //связь с клиентом не установлена
             printf("Problem with PORT\n");
         port500->clt_sock->close();
-        while(port500->get_port() !=0){}  //пытаемся переподключиться
-        flagReadyTSPortThread=true;       //связь с клиентом установлена
+        if(port500->repeatConnect()==0){  //пытаемся переподключиться
+            flagReadyTSPortThread=true;  //переподключились
+        }
     }
 
     int sizeTempBuf=100;
@@ -141,24 +143,21 @@ void call_timeSignalPortThread()
     //             //int check = port500->clt_sock->send("CHECK", strlen("CHECK"));
     //     int check = port500->clt_sock->send("0xFF", strlen("0xFF"));
     //     printf("check = %d\n", check);
-    //     wait(2);
     //     if(check<0){               //порт назначения закрыт клиентом
     //         printf("Problem with PORT\n");
     //         port500->clt_sock->close();
     //         //a=false;
-    //                 while(port500->get_port() !=0){}  //пытаемся переподключиться
-    //                 flagReadyTSPortThread=true;
+    //         if(port500->repeatConnect()==0){  //пытаемся переподключиться
+    //             flagReadyTSPortThread=true;  //переподключились
+    //         }
     //     }
     // }
-    while(repeatConnect){
-        if(port500->get_port()==0){
-            repeatConnect=false;
-            flagReadyTSPortThread=true;
-        }
-    }
+
     while(flagReadyTSPortThread) {
+        needRepeatConnect=false;
         if(eventFlags.wait_all(PUSH_DATA_TO_ETH_FLAG | READY_TO_SEND_DATA_FLAG, osWaitForever, false)) {
             step=1;
+                        flagSendFirstPartToEth=true;
         }
 
         switch (step) {
@@ -177,16 +176,30 @@ void call_timeSignalPortThread()
                     //wasSend1+=clt_sock.send(&TempBuf[0], counter);
                     int resultSendPort1 = port500->clt_sock->send(&TempBuf[0], counter);
                     //wasSend1+=port500->clt_sock->send(&TempBuf[0], counter);
-                    // if(resultSendPort1<0){               //порт назначения закрыт клиентом
-                    //         printf("Problem with PORT\n");
-                    //     port500->clt_sock->close();
+                    wasSend1+=resultSendPort1;
+                    counter=0;
+                     if(resultSendPort1<0){               //порт назначения закрыт клиентом
+                             printf("Problem with PORT\n");
+                         port500->clt_sock->close();
+                         needRepeatConnect=true;
+                         eventFlags.clear(PUSH_DATA_TO_ETH_FLAG );
+                         eventFlags.clear(READY_TO_SEND_DATA_FLAG);
+                         eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
+                        flagGetDataSPI=false;
+                        flagEndOfMeasurementSPI=false;
+                        flagReadyTSPortThread=false;
+                        CircBuffer->clearCircularBuffer();  /*переставляем индексы кольцевого буффера в начало*/
+                        counter=0;
+                        wasSend1=0;/*для отладки*/
+                        wasSend2=0;/*для отладки*/
+                        step=0;
+                        numberBytesSendToEth=0;
+                        numberBytesTakenFromSPI=0;
+                        flagSendFirstPartToEth=false;
                     //     repeatConnect=true;
                     //     flagSendFirstPartToEth=false;                   //выйти и обнулить всё(не доделал проверить обнуление всего)
                     //     flagReadyTSPortThread=false;
-
-                    // }
-                    wasSend1+=resultSendPort1;
-                    counter=0;
+                     }
                 }
             //break;
 
@@ -210,16 +223,32 @@ void call_timeSignalPortThread()
 
                     //wasSend2+=clt_sock.send(&TempBuf[0], counter);
                     int resultSendPort = port500->clt_sock->send(&TempBuf[0], counter);
-                    // if(resultSendPort<0){               //порт назначения закрыт клиентом
-                    //         printf("Problem with PORT\n");
-                    //     port500->clt_sock->close();
-                    //     repeatConnect=true;
-                    //     difference=0;                   //выйти и обнулить всё
-                    //     //flagSendFirstPartToEth=false;                   //выйти и обнулить всё
-                    //     //flagReadyTSPortThread=false;
-                    // }
                     wasSend2+=resultSendPort;
                     counter=0;
+                    if(resultSendPort<0){               //порт назначения закрыт клиентом
+                             printf("Problem with PORT\n");
+                        port500->clt_sock->close();
+                        needRepeatConnect=true;
+                        eventFlags.clear(PUSH_DATA_TO_ETH_FLAG );
+                        eventFlags.clear(READY_TO_SEND_DATA_FLAG);
+                        eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
+                        flagGetDataSPI=false;
+                        flagEndOfMeasurementSPI=false;
+                        flagReadyTSPortThread=false;
+                        CircBuffer->clearCircularBuffer();  /*переставляем индексы кольцевого буффера в начало*/
+                        counter=0;
+                        wasSend1=0;/*для отладки*/
+                        wasSend2=0;/*для отладки*/
+                        step=0;
+                        numberBytesSendToEth=0;
+                        numberBytesTakenFromSPI=0;
+                        flagSendFirstPartToEth=false;
+                        difference=0;
+                    //     repeatConnect=true;
+                    //     flagSendFirstPartToEth=false;                   //выйти и обнулить всё(не доделал проверить обнуление всего)
+                    //     flagReadyTSPortThread=false;
+                    }
+
                 }
                 counter=0;
                 wasSend1=0;/*для отладки*/
@@ -233,6 +262,8 @@ void call_timeSignalPortThread()
                 //eventFlags.clear(STOP_PUSH_DATA_TO_ETH_FLAG);
                 break;
         }
+    if(needRepeatConnect){port500->repeatConnect();printf("new connection get\n"); flagReadyTSPortThread=true;}
+        
     }
     delete port500;
 }
@@ -386,10 +417,13 @@ void getCommandFromPort3(std::string& CommandFromPort)
         case 2:
             printf("\nget command from port: %s\n", &CommandFromPort);
             fflush(stdout);
-            eventFlags.set(GET_DATA_FROM_SPI_FLAG);
-            eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
-            flagGetDataSPI=true;
-            flagEndOfMeasurementSPI=true;
+            if(flagReadyTSPortThread){
+                eventFlags.set(GET_DATA_FROM_SPI_FLAG);
+                eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
+                flagGetDataSPI=true;
+                flagEndOfMeasurementSPI=true;
+            }else{printf("\n port for time signal not found \n");}
+
             break;
         case 3:
             printf("\nget command from port: %s \n", &CommandFromPort);
