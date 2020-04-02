@@ -16,6 +16,7 @@ public:
     SocketAddress clt_addr;
     EthernetInterface ptreth;
     //Thread t2;
+    bool flagReadyPort;
     int PORT;
     int flag_AcceptPort;
 

@@ -2,14 +2,20 @@
 
 CreatePort::CreatePort(EthernetInterface ptreth, int port)
 {
+    flagReadyPort = false;
     PORT = port;
     flag_AcceptPort=get_port();
-    //t2.start();
-    
-//    TCPSocket srv150;  //TCPServer was migrate to TCPSocket
-//    TCPSocket *clt_sock150;
-//    SocketAddress clt_addr150;
-//    EthernetInterface eth150;
+        //flag_AcceptPort==0 связь с клиентом установлена
+        //flag_AcceptPort==-1 связь с клиентом не установлена
+    if(flag_AcceptPort==0){ //связь с клиентом установлена
+        flagReadyPort=true;
+    }else{                           //связь с клиентом не установлена
+            printf("Problem with PORT\n");
+        clt_sock->close();
+        if(repeatConnect()==0){  //пытаемся переподключиться
+            flagReadyPort=true;  //переподключились
+        }
+    }
 }
 
 int CreatePort::get_port(){

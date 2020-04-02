@@ -79,6 +79,7 @@ Thread spiThread;
 Thread timeSignalPortThread;
 Thread resultTaskThread;
 Thread generalPortThread;
+Thread getCommandPortThread;
 //Thread portThread150;
 
 // TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
@@ -329,8 +330,13 @@ int ethernetInterfaceInit()
         
     int resultEthSetNetwork = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
         printf("Set Net: %d\r\n",resultEthSetNetwork);  fflush(stdout);
+    if(resultEthSetNetwork !=0){printf("Error NO set_network \n"); return -1;}
+
+    //int resEthConnect = -1;
+    //while(resEthConnect != 0){printf("into while \n");  resEthConnect = eth.connect(); printf("resEthConnect: %d\r\n",resEthConnect);}
+       // printf("after while \n"); return -1;
     
-    if(0 != eth.connect()) {
+    if(eth.connect() !=0) {
             printf("Error connecting \n");
         return -1;
     }else{
@@ -340,6 +346,7 @@ int ethernetInterfaceInit()
             //printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
         return 0;
     }
+    
 }
 
 void getCommandFromPort(char* ptr_recv_msv)
@@ -484,9 +491,26 @@ void call_generalPortThread(){
     delete[] ReceivedMsv;
 }
 
+
+void call_getCommandPortThread(CreatePort *port){
+    printf("foo \n");
+    //CreatePort *port80 = new CreatePort(eth, 80);
+    char *ReceivedMsv = new char[100]{0};               /* buffer for command from port */
+    string strRecv_msv;
+    while(1){
+        port->clt_sock->recv(ReceivedMsv, 100);
+            printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
+            printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
+        strRecv_msv=ReceivedMsv;
+        getCommandFromPort3(strRecv_msv);
+    }
+    delete[] ReceivedMsv;
+}
+
 int main()
 {
         printf("\n======== 1-start ======================\n");  fflush(stdout);
+        
     #ifdef MBED_MAJOR_VERSION
         printf("Mbed OS version: %d.%d.%d\n\n", MBED_MAJOR_VERSION, MBED_MINOR_VERSION, MBED_PATCH_VERSION);
     #endif
@@ -494,7 +518,26 @@ int main()
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
     int resEthInit = ethernetInterfaceInit();
-    if(resEthInit<0){printf("Ethernet NO SET\n");  fflush(stdout);}
+    if(resEthInit==0){
+        CreatePort *PortConnect = new CreatePort(eth, 80);
+            if(PortConnect->flagReadyPort==true){
+                drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
+                spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
+                getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));
+            }
+    }else{printf("Ethernet NO CONNECT\n");  fflush(stdout);}
+
+
+
+
+        //generalPortThread.start(call_generalPortThread);            //get command from general port
+        //timeSignalPortThread.start(call_timeSignalPortThread);      //send time Signal in ethernet own separate port to client
+    
+
+
+    
+     /*
+    if(resEthInit<0){printf("Ethernet NO CONNECT\n");  fflush(stdout);}
     else{  
         drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
         spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
@@ -502,6 +545,7 @@ int main()
         generalPortThread.start(call_generalPortThread);            //get command from general port
         timeSignalPortThread.start(call_timeSignalPortThread);      //send time Signal in ethernet own separate port to client
     }
+    */
     while(1){}
 }
 
