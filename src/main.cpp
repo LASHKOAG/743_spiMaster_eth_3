@@ -1,6 +1,6 @@
 /*
 743 spi master eth 3
-onePort
+testStruct
 */
 
 #include "mbed.h"
