@@ -65,6 +65,7 @@ int test3=0;
 bool flagMainThread = false;
 bool flagReadyTSPortThread = false;
 bool flagAcceptPort500 = false;
+bool flagAllowRecvFromPort=true;
 
 char Recv_msv150[100];
 char Recv_msvTest[100];
@@ -118,27 +119,28 @@ void drdyINHandlerRise()                                        //set flag after
     eventFlags.set(DRDY_IN_FLAG);
 }
 
-void call_timeSignalPortThread()
+void call_timeSignalPortThread(CreatePort* port)
 {
     bool a=true;
     bool repeatConnect=false;
     bool needRepeatConnect=false;
 
-    CreatePort *port500 = new CreatePort(eth, 500);
-    if(port500->flag_AcceptPort==0){ //связь с клиентом установлена
-        flagReadyTSPortThread=true;
-    }else{                           //связь с клиентом не установлена
-            printf("Problem with PORT\n");
-        port500->clt_sock->close();
-        if(port500->repeatConnect()==0){  //пытаемся переподключиться
-            flagReadyTSPortThread=true;  //переподключились
-        }
-    }
+    //CreatePort *port500 = new CreatePort(eth, 500);
+    // if(port->flag_AcceptPort==0){ //связь с клиентом установлена
+    //     flagReadyTSPortThread=true;
+    // }else{                           //связь с клиентом не установлена
+    //         printf("Problem with PORT\n");
+    //     port->clt_sock->close();
+    //     if(port->repeatConnect()==0){  //пытаемся переподключиться
+    //         flagReadyTSPortThread=true;  //переподключились
+    //     }
+    // }
 
     int sizeTempBuf=100;
     char TempBuf[sizeTempBuf];
     int counter=0;
     bool flagSendFirstPartToEth=true;
+    flagReadyTSPortThread=true;
     int step=0;
     // while(a){
     //             //int check = port500->clt_sock->send("CHECK", strlen("CHECK"));
@@ -175,14 +177,15 @@ void call_timeSignalPortThread()
                         counter++;
                     }
                     //wasSend1+=clt_sock.send(&TempBuf[0], counter);
-                    int resultSendPort1 = port500->clt_sock->send(&TempBuf[0], counter);
+                    int resultSendPort1 = port->clt_sock->send(&TempBuf[0], counter);
                     //wasSend1+=port500->clt_sock->send(&TempBuf[0], counter);
                     wasSend1+=resultSendPort1;
                     counter=0;
                      if(resultSendPort1<0){               //порт назначения закрыт клиентом
                              printf("Problem with PORT\n");
-                         port500->clt_sock->close();
+                         port->clt_sock->close();
                          needRepeatConnect=true;
+                         flagAllowRecvFromPort=false;
                          eventFlags.clear(PUSH_DATA_TO_ETH_FLAG );
                          eventFlags.clear(READY_TO_SEND_DATA_FLAG);
                          eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
@@ -223,13 +226,14 @@ void call_timeSignalPortThread()
                     }
 
                     //wasSend2+=clt_sock.send(&TempBuf[0], counter);
-                    int resultSendPort = port500->clt_sock->send(&TempBuf[0], counter);
+                    int resultSendPort = port->clt_sock->send(&TempBuf[0], counter);
                     wasSend2+=resultSendPort;
                     counter=0;
                     if(resultSendPort<0){               //порт назначения закрыт клиентом
                              printf("Problem with PORT\n");
-                        port500->clt_sock->close();
+                        port->clt_sock->close();
                         needRepeatConnect=true;
+                        flagAllowRecvFromPort=false;
                         eventFlags.clear(PUSH_DATA_TO_ETH_FLAG );
                         eventFlags.clear(READY_TO_SEND_DATA_FLAG);
                         eventFlags.clear(GET_DATA_FROM_SPI_FLAG);
@@ -263,10 +267,10 @@ void call_timeSignalPortThread()
                 //eventFlags.clear(STOP_PUSH_DATA_TO_ETH_FLAG);
                 break;
         }
-    if(needRepeatConnect){port500->repeatConnect();printf("new connection get\n"); flagReadyTSPortThread=true;}
+    if(needRepeatConnect){port->repeatConnect();printf("new connection get\n"); flagReadyTSPortThread=true; flagAllowRecvFromPort=true;}
         
     }
-    delete port500;
+    //delete port;
 }
 
 
@@ -422,7 +426,7 @@ void getCommandFromPort3(std::string& CommandFromPort)
 
     switch (numberCase) {
         case 2:
-            printf("\nget command from port: %s\n", &CommandFromPort);
+            //printf("\nget command from port: %s\n", &CommandFromPort);
             fflush(stdout);
             if(flagReadyTSPortThread){
                 eventFlags.set(GET_DATA_FROM_SPI_FLAG);
@@ -494,17 +498,19 @@ void call_generalPortThread(){
 
 void call_getCommandPortThread(CreatePort *port){
     printf("foo \n");
-    //CreatePort *port80 = new CreatePort(eth, 80);
-    char *ReceivedMsv = new char[100]{0};               /* buffer for command from port */
     string strRecv_msv;
     while(1){
-        port->clt_sock->recv(ReceivedMsv, 100);
-            printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
-            printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
-        strRecv_msv=ReceivedMsv;
-        getCommandFromPort3(strRecv_msv);
+        if(flagAllowRecvFromPort){
+            char *ReceivedMsv = new char[100]{0};               /* buffer for command from port */
+            port->clt_sock->recv(ReceivedMsv, 100);
+                printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
+                printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
+            strRecv_msv=ReceivedMsv;
+            getCommandFromPort3(strRecv_msv);
+            delete[] ReceivedMsv;
+        }
+
     }
-    delete[] ReceivedMsv;
 }
 
 int main()
@@ -524,6 +530,7 @@ int main()
                 drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
                 spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
                 getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));
+                timeSignalPortThread.start(callback(call_timeSignalPortThread, PortConnect));      //send time Signal in ethernet port to client
             }
     }else{printf("Ethernet NO CONNECT\n");  fflush(stdout);}
 
@@ -547,6 +554,7 @@ int main()
     }
     */
     while(1){}
+    //delete PortConnect;
 }
 
 //apArray->goToStartWriteIndex=true;
