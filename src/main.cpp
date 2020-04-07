@@ -14,7 +14,7 @@ testStruct
 #include "hwclockstm.h"
 #include "circbuff.h"
 #include <string>
-//#include <queue>
+#include <queue>
 #include "socket_struct.h"
 //#include <map>    //подключили библиотеку для работы с map
 #include <algorithm>
@@ -66,6 +66,8 @@ bool flagMainThread = false;
 bool flagReadyTSPortThread = false;
 bool flagAcceptPort500 = false;
 bool flagAllowRecvFromPort=true;
+bool flag_cmd_check_answer = false;
+bool flag_busy_port=false;
 
 char Recv_msv150[100];
 char Recv_msvTest[100];
@@ -95,9 +97,27 @@ EventFlags eventFlags;
 
 //map <char, char> myMap;
 vector <char> myVec;
-vector<string> myVec2;
+vector <string> myVec2;
+queue <string> QueueTasks;
 
 CircBuff *CircBuffer= new CircBuff();
+//-----------------------------------------------------------------------------------------------------------------------
+#define CMD_CHECK_CONNECTION        0   //проверка связи с устройством
+//----------------------------------------------------------------------------------------------------------------------
+
+//======================================================================================
+//отправка команды от сервера к клиенту о проверке связи с устройством
+typedef struct {
+    uint8_t IDstm;          //№ stm 
+    uint8_t in_command;     //№ команды из перечня команд запросов
+    int8_t out_command;     //№ команды из перечня команд ответов
+}tcp_server_answer;
+//======================================================================================
+typedef struct{
+    uint32_t id_task;
+    uint8_t number_command;
+}tcp_sTask;
+
 //CircBuffer->initStructCircularBuffer();
 // struct structBuffer{
 //     int8_t MainBuffer[sizeMainBuffer];
@@ -353,70 +373,45 @@ int ethernetInterfaceInit()
     
 }
 
-void getCommandFromPort(char* ptr_recv_msv)
-{
-    int32_t valueFromCommand = ptr_recv_msv[0]-0x30;
-    /* обнулить входящий массив после того как он отработает*/
+void f_cmd_check_connection(CreatePort* port){
+    char test1[10];
+    int8_t test2[10];
+    string test3;
+    //int32_t test4[10];
 
-    switch (valueFromCommand) {
-        case 2:
-            printf("\nget command from port: %d\n", valueFromCommand);
-            fflush(stdout);
-            eventFlags.set(GET_DATA_FROM_SPI_FLAG);
-            eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
-            flagGetDataSPI=true;
-            flagEndOfMeasurementSPI=true;
-            break;
-        case 3:
-            printf("\nget command from port: %d \n", valueFromCommand);
-            fflush(stdout);
-            printf("\n onOffLed() function has to work!\n");
-            fflush(stdout);
-            onOffLed();
-            break;
-        case 4:
-            printf("\nget command %d from port\n", valueFromCommand);
-            fflush(stdout);
-            flagEndOfMeasurementSPI=false;
-            //eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
-            eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
-            eventFlags.clear(READY_TO_SEND_DATA_FLAG);
-            flagGetDataSPI=false;
-            //printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
-            //printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
-            //printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);
-            fflush(stdout);
-            //printf("bool test1=%d \n",test1);fflush(stdout);
-            printf("============================ \n");
-            fflush(stdout);
-            //printf("numberBytesSendToEth %d \n",numberBytesSendToEth);fflush(stdout);
-            //printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
-            //printf("wasSendAll=%d \n",wasSendAll);fflush(stdout);
-            break;
-        case 5:
-            printf("\nget command %d from port\n", valueFromCommand);
-            fflush(stdout);
-            printf("\n port close()\n");
-            fflush(stdout);
-
-
-            // srv.close();
-            // //eth.
-            // eth.disconnect();
-            // flag1=false;
-            // wait(120);
-            break;
-    }
+    tcp_server_answer sServer_Answer;
+    sServer_Answer.IDstm=100;
+    sServer_Answer.in_command=0;
+    sServer_Answer.out_command=1;
+    port->clt_sock->send((char*)&sServer_Answer, sizeof(sServer_Answer));
+    
+    //port->clt_sock->send(test1, sizeof(test1));
+    //port->clt_sock->send(test2, sizeof(test2));
+    //port->clt_sock->send(test4, sizeof(test4));
+    //port->clt_sock->send(test3, sizeof(test3));
+    //port->clt_sock->send(sServer_Answer.IDstm, sizeof(sServer_Answer));
 }
 
+//void getCommandFromPort3(CreatePort* port, std::string& CommandFromPort)
 void getCommandFromPort3(std::string& CommandFromPort)
+    //void getCommandFromPort3(queue& QueueTasksFromPort)
 {
+            cout << "myQueue.size() " << QueueTasks.size() << endl;
+            cout << "myQueue.front() " << QueueTasks.front() << endl;
+            //QueueTasks.
+    // while(!QueueTasks.empty()) {
+    //     cout << QueueTasks.front() << " ";
+    //     //QueueTasks.pop();
+    // }
     int32_t numberCase=0;
     std::cout << " Command from port <- " << CommandFromPort << std::endl;
 
+    string strCHECK_CONNECTION = "0";
     string strGetDataSPI="2";
     string strStopGetDataSPI="4";
     string strDate="date";
+
+    if (CommandFromPort.compare(0,strCHECK_CONNECTION.size(), strCHECK_CONNECTION) == 0){numberCase=0; printf("case 0\n");}
 
     if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
     if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
@@ -425,9 +420,16 @@ void getCommandFromPort3(std::string& CommandFromPort)
     /* обнулить входящий массив после того как он отработает*/
 
     switch (numberCase) {
+        case 0:
+            printf("case 000\n");
+            flag_cmd_check_answer = true;
+            //Thread testThread;
+            //testThread.start();
+            //f_cmd_check_connection(port);
+            break;
         case 2:
             //printf("\nget command from port: %s\n", &CommandFromPort);
-            fflush(stdout);
+            //fflush(stdout);
             if(flagReadyTSPortThread){
                 eventFlags.set(GET_DATA_FROM_SPI_FLAG);
                 eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
@@ -480,21 +482,21 @@ void getCommandFromPort3(std::string& CommandFromPort)
             break;
     }
 }
-
+/*
 void call_generalPortThread(){
     CreatePort *port80 = new CreatePort(eth, 80);
-    char *ReceivedMsv = new char[100]{0};               /* buffer for command from port */
+    char *ReceivedMsv = new char[100]{0};               // buffer for command from port 
     string strRecv_msv;
     while(1){
         port80->clt_sock->recv(ReceivedMsv, 100);
             printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
             printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
         strRecv_msv=ReceivedMsv;
-        getCommandFromPort3(strRecv_msv);
+        getCommandFromPort3(CreatePort* port,strRecv_msv);
     }
     delete[] ReceivedMsv;
 }
-
+*/
 
 void call_getCommandPortThread(CreatePort *port){
     printf("foo \n");
@@ -506,10 +508,41 @@ void call_getCommandPortThread(CreatePort *port){
                 printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
                 printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
             strRecv_msv=ReceivedMsv;
+            //getCommandFromPort3(port, strRecv_msv);
+            QueueTasks.push(strRecv_msv);
+            //cout << "myQueue.size() " << QueueTasks.size() << endl;
+            //cout << "\nmyQueue.front() " << QueueTasks.front() << endl;
+
             getCommandFromPort3(strRecv_msv);
+            //getCommandFromPort3(QueueTasks);
             delete[] ReceivedMsv;
         }
 
+    }
+}
+
+void dispatcher(CreatePort* port){
+    uint8_t task;
+    
+    switch (task)
+    {
+    case 0:    
+        tcp_server_answer sServer_Answer;
+
+        sServer_Answer.IDstm=100;
+        sServer_Answer.in_command=0;
+        sServer_Answer.out_command=1;
+        while(flag_busy_port == true){}  //ждем когда можно отправлять, порт занят другой задачей
+        if(flag_busy_port==false){
+            flag_busy_port=true;
+            port->clt_sock->send((char*)&sServer_Answer, sizeof(sServer_Answer));
+            flag_busy_port=false;
+        }
+        
+        break;
+    
+    default:
+        break;
     }
 }
 
@@ -524,13 +557,21 @@ int main()
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
     int resEthInit = ethernetInterfaceInit();
+    //CreatePort *PortConnect = new CreatePort(eth, 80);
+    //if(resEthInit==0 && PortConnect->flagReadyPort==true){
     if(resEthInit==0){
         CreatePort *PortConnect = new CreatePort(eth, 80);
-            if(PortConnect->flagReadyPort==true){
+            if(PortConnect->flagReadyPort==true){  //только когда есть соединение с клиентом, тогда имеет смысл снимать сигнад и тд
                 drdyIN.rise(&drdyINHandlerRise);   //interrupt DRDY flag from slave (hardware)
                 spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
-                getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));
-                timeSignalPortThread.start(callback(call_timeSignalPortThread, PortConnect));      //send time Signal in ethernet port to client
+                getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));   //get command from general port
+                timeSignalPortThread.start(callback(call_timeSignalPortThread, PortConnect));   //send time Signal in ethernet port to client
+                // if(flag_cmd_check_answer){
+                //     printf("flag_cmd_check_answer\n");
+                //     f_cmd_check_connection(PortConnect);
+                //     flag_cmd_check_answer=false;
+                // }
+                
             }
     }else{printf("Ethernet NO CONNECT\n");  fflush(stdout);}
 
@@ -553,7 +594,15 @@ int main()
         timeSignalPortThread.start(call_timeSignalPortThread);      //send time Signal in ethernet own separate port to client
     }
     */
-    while(1){}
+    while(1){
+        // printf("1111\n");
+        // printf("flag_cmd_check_answer = %d\n",flag_cmd_check_answer);
+        //         if(flag_cmd_check_answer){
+        //             printf("flag_cmd_check_answer\n");
+        //             f_cmd_check_connection(PortConnect);
+        //             flag_cmd_check_answer=false;
+        //         }
+    }
     //delete PortConnect;
 }
 
@@ -712,5 +761,63 @@ void call_counterThread(){
     counter_flags++;
     printf("counter_flags = %u \n", counter_flags);
   }
+}
+*/
+
+/*
+void getCommandFromPort(char* ptr_recv_msv)
+{
+    int32_t valueFromCommand = ptr_recv_msv[0]-0x30;
+   // обнулить входящий массив после того как он отработает
+
+    switch (valueFromCommand) {
+        case 2:
+            printf("\nget command from port: %d\n", valueFromCommand);
+            fflush(stdout);
+            eventFlags.set(GET_DATA_FROM_SPI_FLAG);
+            eventFlags.set(PUSH_DATA_TO_ETH_FLAG);
+            flagGetDataSPI=true;
+            flagEndOfMeasurementSPI=true;
+            break;
+        case 3:
+            printf("\nget command from port: %d \n", valueFromCommand);
+            fflush(stdout);
+            printf("\n onOffLed() function has to work!\n");
+            fflush(stdout);
+            onOffLed();
+            break;
+        case 4:
+            printf("\nget command %d from port\n", valueFromCommand);
+            fflush(stdout);
+            flagEndOfMeasurementSPI=false;
+            //eventFlags.set(STOP_PUSH_DATA_TO_ETH_FLAG);
+            eventFlags.clear(PUSH_DATA_TO_ETH_FLAG);
+            eventFlags.clear(READY_TO_SEND_DATA_FLAG);
+            flagGetDataSPI=false;
+            //printf("buff->readIndex=%d \n",buff.readIndex);fflush(stdout);
+            //printf("buff->writeIndex=%d \n",buff.writeIndex);fflush(stdout);
+            //printf("numberBytesTakenFromSPI=%d \n",numberBytesTakenFromSPI);
+            fflush(stdout);
+            //printf("bool test1=%d \n",test1);fflush(stdout);
+            printf("============================ \n");
+            fflush(stdout);
+            //printf("numberBytesSendToEth %d \n",numberBytesSendToEth);fflush(stdout);
+            //printf("numberBytesTakenFromSPI %d \n",numberBytesTakenFromSPI);fflush(stdout);
+            //printf("wasSendAll=%d \n",wasSendAll);fflush(stdout);
+            break;
+        case 5:
+            printf("\nget command %d from port\n", valueFromCommand);
+            fflush(stdout);
+            printf("\n port close()\n");
+            fflush(stdout);
+
+
+            // srv.close();
+            // //eth.
+            // eth.disconnect();
+            // flag1=false;
+            // wait(120);
+            break;
+    }
 }
 */
