@@ -1,6 +1,6 @@
 /*
 743 spi master eth 3
-testStruct
+queue1
 */
 
 #include "mbed.h"
@@ -9,15 +9,20 @@ testStruct
 #include "TCPServer.h"
 #include "TCPSocket.h"
 #include <time.h>
+#include <stdio.h>
 #include <vector>
 #include <iostream>
 #include "hwclockstm.h"
 #include "circbuff.h"
 #include <string>
+#include <chrono>
+#include <math.h>
+//#include "chrono_io"
 #include <queue>
 #include "socket_struct.h"
 //#include <map>    //подключили библиотеку для работы с map
 #include <algorithm>
+//#include <unistd.h>
 #include "createport.h"
 
 #include "rtos/Thread.h"
@@ -25,6 +30,11 @@ testStruct
 #include "platform/mbed_critical.h"
 
 #include "platform/CircularBuffer.h"
+
+
+
+using namespace std::chrono;
+
 
 
 
@@ -68,6 +78,7 @@ bool flagAcceptPort500 = false;
 bool flagAllowRecvFromPort=true;
 bool flag_cmd_check_answer = false;
 bool flag_busy_port=false;
+bool flag_get_log=false; // init false;
 
 char Recv_msv150[100];
 char Recv_msvTest[100];
@@ -98,7 +109,12 @@ EventFlags eventFlags;
 //map <char, char> myMap;
 vector <char> myVec;
 vector <string> myVec2;
+    std::vector <int32_t> CMD_ARRAY; //вектор набора существующих задач
+    std::vector<int32_t>::iterator iter;
+
+
 queue <string> QueueTasks;
+
 
 CircBuff *CircBuffer= new CircBuff();
 //-----------------------------------------------------------------------------------------------------------------------
@@ -410,13 +426,16 @@ void getCommandFromPort3(std::string& CommandFromPort)
     string strGetDataSPI="2";
     string strStopGetDataSPI="4";
     string strDate="date";
+    string strSeven="7";
 
     if (CommandFromPort.compare(0,strCHECK_CONNECTION.size(), strCHECK_CONNECTION) == 0){numberCase=0; printf("case 0\n");}
 
     if (CommandFromPort.compare(0,strGetDataSPI.size(), strGetDataSPI) == 0){numberCase=2; printf("case 2\n");}
     if (CommandFromPort.compare(0,strStopGetDataSPI.size(), strStopGetDataSPI) == 0){numberCase=4; printf("case 4\n");}
     if (CommandFromPort.compare(0,strDate.size(), strDate) == 0){numberCase=6; printf("case 6\n");}
+    if (QueueTasks.front().compare(0,strSeven.size(), strSeven) == 0){numberCase=7; printf("case 7\n");}
 
+QueueTasks.pop();
     /* обнулить входящий массив после того как он отработает*/
 
     switch (numberCase) {
@@ -480,6 +499,10 @@ void getCommandFromPort3(std::string& CommandFromPort)
         case 6:
                 std::cout << "step case 6" << std::endl;
             break;
+        case 7:
+            printf("case 77\n");
+
+            break;
     }
 }
 /*
@@ -498,58 +521,510 @@ void call_generalPortThread(){
 }
 */
 
+int send_log_message(CreatePort* port, char* msg, int len)
+{
+    if (msg == NULL) return 0;
+    if (len <= 0) return 0;
+    //if (!sock) return -1;
+    
+    tcp_packet_t ans;       //заслать ответ
+    memset(&ans, 0x00, sizeof(tcp_packet_t));
+    ans.command = CALLBACK_LOG_MESSAGE;
+    //ans.length = len;
+    ans.length = strlen(msg);
+    //ans.buff = new char[len];
+    ans.buff = new char[strlen(msg)];
+    //memcpy(&ans.buff[0], &msg[0], len);
+    memcpy(&ans.buff[0], &msg[0], strlen(msg));
+   
+    //int32_t len_send = sizeof(ans.command)+sizeof(ans.length) + len;
+    int32_t len_send = sizeof(ans.command)+sizeof(ans.length) + strlen(msg);
+    //int32_t byteSend = port->clt_sock->send(&ans, len_send);
+    char *TempMSV = new char[len_send];
+    int32_t pos1=0;
+    memcpy(&TempMSV[pos1], (char*)&ans.command, sizeof(ans.command));
+        pos1+=sizeof(ans.command);
+    memcpy(&TempMSV[pos1], (char*)&ans.length, sizeof(ans.length));
+        pos1+=sizeof(ans.length);
+    //memcpy(&TempMSV[pos1], (char*)&ans.buff[0], len);
+    memcpy(&TempMSV[pos1], (char*)&ans.buff[0], strlen(msg));
+
+    int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
+        // printf("ans.command = %u\t", ans.command);
+        // printf("ans.length = %u\t", ans.length);
+        // printf("ans.buff = %s\n", ans.buff);
+        printf("log msg = %s\n", msg);
+    delete[] TempMSV;
+    delete[] ans.buff;
+    return byteSend;
+}
+
+void dispatcher(CreatePort* port, char* buf, int len){
+
+    // int32_t task;
+    // task = buf[0];
+    // printf("task # = %d\n", task);
+
+    // if(QueueTasks.front() !="9"){
+    //     QueueTasks.pop(); printf("QueueTasks.pop()\n");
+    // }else{
+    //     task = stoi(QueueTasks.front());
+    //     printf("task # = %d\n", task);
+    
+    //task = stoi(QueueTasks.front());
+    // printf("task # = %d\n", task);
+    
+    if (!buf) return;
+        printf("len = %d\n", len);    
+    if (len < 8) return;  //как минимум 2 по 4 байта (команда и длина)
+
+    tcp_packet_t packet;
+    memset(&packet, 0x00, sizeof(tcp_packet_t));
+    memcpy((char*)&packet.command, &buf[0], sizeof(packet.command));
+    memcpy((char*)&packet.length, &buf[sizeof(packet.command)], sizeof(packet.length));
+    if ((len-8) > 0){
+        packet.buff = new char[len-8];
+        memcpy(&packet.buff[0], &buf[sizeof(packet.command)+sizeof(packet.length)], len-8);
+    }
+
+        printf("packet.command = %u \n", packet.command);
+    //=====проверка, реализована ли запрашиваемая функциональность==========================================
+    iter = std::find(CMD_ARRAY.begin(), CMD_ARRAY.end(), packet.command); // поиск поступившего номера задач среди реализованных
+        if (iter != CMD_ARRAY.end()){
+                std::cout << "Element Found" << std::endl;  //функционал реализован, выполняем
+                char* Msg= new char[100];
+                sprintf(Msg, "Task %u was found", packet.command);
+            if(flag_get_log){send_log_message(port,Msg, strlen("Msg"));}
+            delete[] Msg;
+            switch (packet.command)  //switch (task)
+            {
+            case 0:    
+                // tcp_server_answer sServer_Answer;
+
+                // sServer_Answer.IDstm=100;
+                // sServer_Answer.in_command=0;
+                // sServer_Answer.out_command=1;
+                // while(flag_busy_port == true){}  //ждем когда можно отправлять, порт занят другой задачей
+                // if(flag_busy_port==false){
+                //     flag_busy_port=true;
+                //     port->clt_sock->send((char*)&sServer_Answer, sizeof(sServer_Answer));
+                //     flag_busy_port=false;
+                // }
+                break;
+            case CMD_SET_TIME:{   //2
+                //!!!необходимо вкатать в прибор время
+                if (!packet.buff) break;
+                    // time_t seconds = time(NULL);
+                    // printf("Time as seconds since January 1, 1970 = %u\n", (unsigned int)seconds);
+                    // printf("Time as a basic string = %s", ctime(&seconds));
+                time_t* t;
+                t = (time_t*)&packet.buff[0];
+                    printf("Command: Set time %d\n", *t);
+                
+                if (t != 0){
+                    time_t t1 = time(NULL);  printf("Time on board was = %u\n", (unsigned int)t1);  printf("Time as a basic string = %s", ctime(&t1));  fflush(stdout);
+                    //if (abs(t1-(*t)) > 2){  //не компилируется
+                    //if ((t1-(*t)) > 2 || (t1-(*t)) < 2){ //проверить!
+                    //time_t x = (t1-(*t));
+                    if (t1 > *t + 2 || *t >= t1 +2 ){ //проверить!
+                        //printf("setting time\n");
+                        set_time(*t);
+                        if(flag_get_log){send_log_message(port,"The time was corrected", strlen("The time was corrected"));}
+                    }
+                }
+                //заслать ответ
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                ans.length = sizeof(ans.command);
+                ans.buff = (char*)&packet.command;
+                int32_t len_send = sizeof(ans.command) + sizeof(ans.length) + sizeof(packet.command);
+                int8_t *TempMSV= new int8_t[len_send];
+                int32_t pos1=0;
+                memcpy(&TempMSV[pos1], (char*)&ans.command, sizeof(ans.command));
+                    pos1+=sizeof(ans.command);
+                memcpy(&TempMSV[pos1], (char*)&ans.length, sizeof(ans.length));
+                    pos1+=sizeof(ans.length);
+                memcpy(&TempMSV[pos1], (char*)&ans.buff[0], sizeof(packet.command));
+                    pos1+=sizeof(packet.command);
+
+                port->clt_sock->send(&TempMSV[0], len_send);
+
+                    printf("send SET_TIME\n");
+                delete[] TempMSV;
+                break;
+            }
+            case CMD_HAL_INIT:{//complete //5
+                    printf("Command: Init HAL\n");
+                if(flag_get_log){send_log_message(port,"Command: Init HAL", strlen("Command: Init HAL"));}
+                flag_get_log=false;
+                // if (ts_task != NULL){
+                // printf("TIMESIGNAL ALREADY RUNNING!\n");
+                // int res = TCP_EC_TASK_IN_PROCESS;
+                // tcp_packet_t ans;
+                // memset(&ans, 0x00, sizeof(tcp_packet_t));
+                // ans.command = CMD_ANSWER;
+                // ans.length = sizeof(ans.command)+sizeof(res);
+                // ans.buff = new char[ans.length];
+                // memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+                // memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(res));
+                // int cnt = send_packet(&ans);
+                // delete[] ans.buff;
+                // break;
+                // }
+             /*   int res;
+                HD = NULL;
+                if (CHECK_EC(res = init_hal())){
+                printf("init hal success\n");
+                HD = get_descriptor();
+                if (HD == NULL)
+                    printf("error getting descriptor\n");
+                }
+                else{
+                printf("init hal error: %d\n", res);
+                }
+                if ((HD == NULL) && (CHECK_EC(res)))
+                res = TCP_EC_ERROR_DESCRIPTOR;
+                //заслать ответ
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                ans.length = sizeof(ans.command)+sizeof(res);
+                ans.buff = new char[sizeof(packet.command)+sizeof(res)];
+                memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+                memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(res));
+                int cnt = send_packet(&ans);
+                delete[] ans.buff;
+                break;*/
+            }
+            case CMD_HAL_GET_DESC:{  //9
+                    printf("Command: get descriptor\n");
+                if(flag_get_log){send_log_message(port,"Command: get descriptor", strlen("Command: get descriptor"));}
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                //----------------------------------------------------------------------------------
+                char dev_name1[]="stm-01";
+                tcp_hal_desc_t desc;
+                desc.id=10;
+                desc.dev_lib_version = 20;
+                desc.interface_version = 30;
+                desc.server_version = 40;
+                desc.len_dev_name = strlen(dev_name1);
+                desc.dev_name = dev_name1;
+                //---------------------------------------------------------------------------------
+                //if (!HD){
+                if (false){
+                        printf("descriptor is NULL\n");
+                    ans.length = sizeof(ans.command);
+                    ans.buff = new char[sizeof(packet.command)];
+                    memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+                }
+                else{
+                        printf("descriptor is not null\n");
+                    //int len = strlen(HD->dev_name);
+                    int32_t len_dev_name = strlen(desc.dev_name);
+                    ans.length = sizeof(ans.command)+4*sizeof(unsigned short)+sizeof(unsigned int)+len_dev_name;
+                        //printf("ans.length =%d \n", ans.length);
+                    ans.buff = new char[ans.length];
+                    int32_t pos = 0;
+                    if(ans.buff == NULL){                   // проверить выделилась ли память?
+                            printf("ans.buff == NULL\n");
+                        int8_t *TempMSV= new int8_t[12];
+                        ans.length = 2*sizeof(packet.command); 
+                        memcpy(&ans.buff[pos], (char*)&packet.command, sizeof(packet.command));
+                            pos+= sizeof(packet.command);
+                        memcpy(&ans.buff[pos], (char*)TCP_EC_UNSUCCESS, sizeof(packet.command));
+                            pos=0;
+                        delete[] TempMSV;
+                    }
+                    memcpy(&ans.buff[pos], (char*)&packet.command, sizeof(packet.command));
+                        pos+= sizeof(packet.command);
+                    //memcpy(&ans.buff[pos], (char*)&HD->id, sizeof(unsigned short));
+                    memcpy(&ans.buff[pos], (char*)&desc.id, sizeof(unsigned short)); //1
+                        pos+= sizeof(unsigned short);
+                    //memcpy(&ans.buff[pos], (char*)&HD->dev_lib_version, sizeof(unsigned short));
+                    memcpy(&ans.buff[pos], (char*)&desc.dev_lib_version, sizeof(unsigned short));
+                        pos+= sizeof(unsigned short);
+                    //memcpy(&ans.buff[pos], (char*)&HD->interface_version, sizeof(unsigned short));
+                    memcpy(&ans.buff[pos], (char*)&desc.interface_version, sizeof(unsigned short));
+                        pos+= sizeof(unsigned short);
+                    //unsigned short sv = SERVER_VERSION;
+                    unsigned short sv = 111;
+                    memcpy(&ans.buff[pos], (char*)&sv, sizeof(unsigned short));
+                        pos+= sizeof(unsigned short);
+                    memcpy(&ans.buff[pos], (char*)&desc.len_dev_name, sizeof(unsigned int));
+                        pos+= sizeof(unsigned int);
+                    if (len_dev_name > 0)
+                            // printf("desc.dev_name =%s \n", desc.dev_name);
+                            // printf("len_dev_name =%d \n", len_dev_name);
+                        //memcpy(&ans.buff[pos], &HD->dev_name[0], len);
+                        memcpy(&ans.buff[pos], &desc.dev_name[0], len_dev_name);
+                    }// от if
+                    //ну и собственно заслать его даже если нулевой
+                    //int cnt = send_packet(&ans);
+                    int32_t len_send=sizeof(ans.command)+sizeof(ans.length) + ans.length; //структура ответа tcp_packet_t: command, length of buff //(ans.length)
+                        // printf("len_send = %d\n", len_send);
+                        // printf("strlen(ans.buff) = %d\n", strlen(ans.buff));
+                    int8_t *TempMSV= new int8_t[len_send];
+                    int32_t pos1=0;
+                    memcpy(&TempMSV[pos1], &ans.command, sizeof(ans.command));
+                        pos1+=sizeof(ans.command);
+                    memcpy(&TempMSV[pos1], &ans.length, sizeof(ans.length));
+                        pos1+=sizeof(ans.length);
+                    memcpy(&TempMSV[pos1], &ans.buff[0], ans.length);
+                    int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
+
+                    if( byteSend > 0){
+                         if(flag_get_log){send_log_message(port,"HAL_GET_DESC send", strlen("HAL_GET_DESC send"));}
+                    }
+
+                    delete[] ans.buff;    
+                    delete[] TempMSV;
+
+                break;
+            }
+            case CMD_HAL_START_LOG:{//complete //10
+                    printf("Command: Start log task\n");
+                flag_get_log=true;
+                int res;
+                /*if (log_task == NULL)
+                log_task = new CLogTask(this);
+                if (CHECK_EC(res = log_task->start())){
+                printf("start log success\n");
+                }
+                else{
+                printf("start log task error: %d\n", res);
+                }*/
+
+                //заслать ответ
+                res=0;
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                ans.length = sizeof(ans.command)+sizeof(res);
+                ans.buff = new char[sizeof(packet.command)+sizeof(res)];
+                memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+                memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(res));
+
+                int32_t len_send=sizeof(ans.command)+sizeof(ans.length) + ans.length; //структура ответа tcp_packet_t: command, length of buff //(ans.length)
+                int8_t *TempMSV= new int8_t[len_send];
+                int32_t pos=0;
+                memcpy(&TempMSV[pos], &ans.command, sizeof(ans.command));
+                    pos+=sizeof(ans.command);
+                memcpy(&TempMSV[pos], &ans.length, sizeof(ans.length));
+                    pos+=sizeof(ans.length);
+                memcpy(&TempMSV[pos], &ans.buff[0], ans.length);
+                
+                int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
+
+                if(flag_get_log){send_log_message(port,"Logging was started", strlen("Logging was started"));}
+                
+                delete[] ans.buff;
+                delete[] TempMSV;
+                break;
+            }
+            case CMD_HAL_STOP_LOG:{//complete
+                    printf("Command: Stop log task\n");
+                int res = 0; //EC_SUCCESS
+                // if (log_task != NULL){
+                // res = log_task->stop();
+                // delete log_task;
+                // log_task = NULL;
+                // }
+                //заслать ответ
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                ans.length = sizeof(ans.command)+sizeof(res);
+                ans.buff = new char[sizeof(packet.command)+sizeof(res)];
+                memcpy(&ans.buff[0], (char*)&packet.command, sizeof(packet.command));
+                memcpy(&ans.buff[sizeof(packet.command)], (char*)&res, sizeof(res));
+
+                int32_t len_send=sizeof(ans.command)+sizeof(ans.length) + ans.length; //структура ответа tcp_packet_t: command, length of buff //(ans.length)
+                int8_t *TempMSV= new int8_t[len_send];
+                int32_t pos=0;
+                memcpy(&TempMSV[pos], &ans.command, sizeof(ans.command));
+                    pos+=sizeof(ans.command);
+                memcpy(&TempMSV[pos], &ans.length, sizeof(ans.length));
+                    pos+=sizeof(ans.length);
+                memcpy(&TempMSV[pos], &ans.buff[0], ans.length);
+                
+                int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
+
+                if(flag_get_log){send_log_message(port,"Logging was stopped", strlen("Logging was stopped"));}
+
+                flag_get_log=false;
+                
+                delete[] ans.buff;
+                delete[] TempMSV;
+
+                break;
+            }
+            case CMD_HAL_STOP_TS_TASK:{
+                    printf("Command: stop TIMESIGNAL task\n");
+                int res = TCP_EC_SUCCESS;
+                // if (ts_task != NULL){
+                // ts_task->stop();
+                // }
+                //заслать ответ
+                ts_end_t ts_end;
+                    memset(&ts_end, 0x00, sizeof(ts_end_t));
+                    ts_end.ec = 100;
+                    ts_end.adc_channel=200;
+                    ts_end.sub_channel=300;
+                    ts_end.freq_channel=400;
+                    ts_end.all_samples=500;
+                    ts_end.wrote_samples=600;
+                    ts_end.wrote_labels=700;
+                    ts_end.gain=1.0;
+                    ts_end.gain_p3=2.0;
+                
+                tcp_packet_t ans;
+                    memset(&ans, 0x00, sizeof(tcp_packet_t));
+                    ans.command = CMD_ANSWER;
+                
+                //ans.command = CMD_ANSWER; //CALLBACK_TS_END 155
+                ans.command = CALLBACK_TS_END; // 155
+                ans.length = sizeof(ans.command)+sizeof(int); //+sizeof(res) ==8
+                ans.buff = new char[ans.length];
+                memcpy(&ans.buff[0], (char*)&ans.command, sizeof(ans.command));
+                memcpy(&ans.buff[sizeof(ans.command)+sizeof(ans.command)], (char*)&res, sizeof(int));
+
+                port->clt_sock->send((char*)&ans, sizeof(ans));
+                delete[] ans.buff;
+                break;
+            }
+
+            case 111:  
+                    printf("case 111\n");  
+                tcp_server_answer sServer_Answer;
+
+                sServer_Answer.IDstm=100;
+                sServer_Answer.in_command=0;
+                sServer_Answer.out_command=1;
+                while(flag_busy_port == true){}  //ждем когда можно отправлять, порт занят другой задачей
+                if(flag_busy_port==false){
+                    flag_busy_port=true;
+                    port->clt_sock->send((char*)&sServer_Answer, sizeof(sServer_Answer));
+                    flag_busy_port=false;
+                }
+                break;
+            
+            default:
+                break;
+            }
+            delete[] packet.buff;
+        }else{
+            std::cout << "Element Not Found" << std::endl;      //такая задача не реализована
+        }
+    //===================================================================================================
+ 
+  //  QueueTasks.pop();
+//}
+}
+
+void parser_incoming_buffer_from_port(char* buf, int len){
+    // union ULI{
+    //     unsigned int UI;
+    //     char Z[4];
+    //     unsigned short US;
+    // }UnionLI;
+
+    // UnionLI.Z[0]=buf[0];
+    // UnionLI.Z[1]=buf[1];
+    // UnionLI.Z[2]=buf[2];
+    // UnionLI.Z[3]=buf[3];
+
+    // unsigned int uCommand= UnionLI.UI;
+    // printf("uCommand = %u \n", uCommand);
+
+    // unsigned int a = ((buf[0]-'0')*1000 + (buf[1]-'0')*100 +(buf[2]-'0')*10 +(buf[3]-'0'));
+    // printf("u a = %u \n", a);
+
+    //     printf("foo parser_incoming_buffer_from_port \n");
+    //     printf("char* buf[0] = %d \n", buf[0]);
+    if (!buf) return;
+    //как минимум 2 по 4 байта (команда и длина)
+    if (len < 8) return;
+    tcp_packet_t packet;
+    memset(&packet, 0x00, sizeof(tcp_packet_t));
+    memcpy((char*)&packet.command, &buf[0], sizeof(packet.command));
+    //memcpy((char*)&packet.command, &a, sizeof(packet.command));
+    memcpy((char*)&packet.length, &buf[sizeof(packet.command)], sizeof(packet.length));
+    if ((len-8) > 0){
+        packet.buff = new char[len-8];
+        memcpy(&packet.buff[0], &buf[sizeof(packet.command)+sizeof(packet.length)], len-8);
+    }
+        printf("parser packet.command = %u \n", packet.command);
+        printf("parser packet.command = %d \n", packet.command);
+        //printf("parser packet.command = %u \n", &packet.command);
+        printf("=========================== \n");
+    //QueueTasks.push(packet.command); //добавляем packet.command в очередь выполнения
+    //dispatcher2(QueueTasks, packet);
+}
+
+
 void call_getCommandPortThread(CreatePort *port){
-    printf("foo \n");
+        printf("foo getCommandPortT\n");
     string strRecv_msv;
+    int32_t sizeReceivedMsv=100;
+    //char ReceivedMsv[100] = {0, };               /* buffer for command from port */
+    //char* ReceivedMsv=" ";
     while(1){
         if(flagAllowRecvFromPort){
-            char *ReceivedMsv = new char[100]{0};               /* buffer for command from port */
-            port->clt_sock->recv(ReceivedMsv, 100);
-                printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
-                printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
-            strRecv_msv=ReceivedMsv;
-            //getCommandFromPort3(port, strRecv_msv);
-            QueueTasks.push(strRecv_msv);
-            //cout << "myQueue.size() " << QueueTasks.size() << endl;
-            //cout << "\nmyQueue.front() " << QueueTasks.front() << endl;
+            char *ReceivedMsv = new char[sizeReceivedMsv]{0};               /* buffer for command from port */
+            //char ReceivedMsv2[100] = " ";
+            //ReceivedMsv2[0]=100;
+             //ReceivedMsv2[2]=50;
+             //printf("strlen ReceivedMsv2 = %d\n", strlen(ReceivedMsv2));
 
-            getCommandFromPort3(strRecv_msv);
+        // for(int i=0; i<strlen(ReceivedMsv2); ++i){
+        //     printf("ReceivedMsv2[%d] = %d \n", i, ReceivedMsv2[i]);
+        // }
+            //int *ReceivedMsv2 = new int[100]{0};               /* buffer for command from port */
+            //port->clt_sock->recv(ReceivedMsv, sizeReceivedMsv);
+            port->clt_sock->recv(ReceivedMsv, 100);
+            //parser_incoming_buffer_from_port(ReceivedMsv, strlen(ReceivedMsv));
+
+                //printf("ReceivedMsv port80 = %s \n", ReceivedMsv);
+                //printf("strlen ReceivedMsv80 = %d\n", strlen(ReceivedMsv));
+
+            strRecv_msv=ReceivedMsv;
+                //getCommandFromPort3(port, strRecv_msv);
+            QueueTasks.push(strRecv_msv);
+
+            //getCommandFromPort3(strRecv_msv);
+            //dispatcher(port, ReceivedMsv2, strlen(ReceivedMsv2));
+            dispatcher(port, ReceivedMsv, sizeReceivedMsv);
             //getCommandFromPort3(QueueTasks);
             delete[] ReceivedMsv;
+            //delete[] ReceivedMsv2;
         }
 
     }
 }
 
-void dispatcher(CreatePort* port){
-    uint8_t task;
-    
-    switch (task)
-    {
-    case 0:    
-        tcp_server_answer sServer_Answer;
 
-        sServer_Answer.IDstm=100;
-        sServer_Answer.in_command=0;
-        sServer_Answer.out_command=1;
-        while(flag_busy_port == true){}  //ждем когда можно отправлять, порт занят другой задачей
-        if(flag_busy_port==false){
-            flag_busy_port=true;
-            port->clt_sock->send((char*)&sServer_Answer, sizeof(sServer_Answer));
-            flag_busy_port=false;
-        }
-        
-        break;
-    
-    default:
-        break;
-    }
-}
 
 int main()
 {
         printf("\n======== 1-start ======================\n");  fflush(stdout);
-        
+    //===================================================================================================
+    for( int32_t i=2; i<16; ++i){
+       CMD_ARRAY.push_back(i);
+    }
+    CMD_ARRAY.push_back(17);
+    CMD_ARRAY.push_back(18);
+    CMD_ARRAY.push_back(19);
+    CMD_ARRAY.push_back(43);
+    CMD_ARRAY.push_back(44);
+    CMD_ARRAY.push_back(111);
+        // for( iter=CMD_ARRAY.begin(); iter<CMD_ARRAY.end(); ++iter){ //вывод в консоль для отладки
+        //     std::cout << *iter <<std::endl;
+        // }
+    //===================================================================================================== 
+
     #ifdef MBED_MAJOR_VERSION
         printf("Mbed OS version: %d.%d.%d\n\n", MBED_MAJOR_VERSION, MBED_MINOR_VERSION, MBED_PATCH_VERSION);
     #endif
@@ -557,6 +1032,10 @@ int main()
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
     int resEthInit = ethernetInterfaceInit();
+
+
+    
+
     //CreatePort *PortConnect = new CreatePort(eth, 80);
     //if(resEthInit==0 && PortConnect->flagReadyPort==true){
     if(resEthInit==0){
@@ -605,6 +1084,28 @@ int main()
     }
     //delete PortConnect;
 }
+
+    //std::vector<int>::difference_type index = std::distance(CMD_ARRAY.begin(), iter);
+
+    //iter = std::find(CMD_ARRAY.begin(), CMD_ARRAY.end(), 22);
+
+                        // for(int32_t i=0; i<len_send; ++i){
+                        //     printf("TempMSV[%d] = %d\n", i, TempMSV[i]);
+                        // }
+
+// unsigned int x = 1001;
+// char y;
+// printf("x & 0xFF = %d \n", x & 0xFF);
+// printf("(x >> 8) & 0xFF = %d \n", (x >> 8) & 0xFF);
+
+//     for(int i=0; i<(sizeof(MsvTemp)/sizeof(MsvTemp[0])); ++i){
+//         printf("MsvTemp[%d] = %d \n", i, MsvTemp[i]);
+//     }
+
+
+                    
+                        // printf("ans.command = %d\n", ans.command);
+                        // printf("ans.length = %d\n", ans.length);
 
 //apArray->goToStartWriteIndex=true;
 // apArray->goToStartReadIndex=true;
