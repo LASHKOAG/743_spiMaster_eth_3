@@ -559,6 +559,26 @@ int send_log_message(CreatePort* port, char* msg, int len)
     return byteSend;
 }
 
+int send_log_unconnect(CreatePort* port)
+{
+    //if (!sock) return -1;
+    tcp_packet_t ans;       //заслать ответ
+    memset(&ans, 0x00, sizeof(tcp_packet_t));
+    ans.command = CALLBACK_LOG_UNCONNECT;
+    ans.length = 0;
+    int32_t len_send = sizeof(ans.command)+sizeof(ans.length);
+    char *TempMSV = new char[len_send];
+    int32_t pos=0;
+    memcpy(&TempMSV[pos], (char*)&ans.command, sizeof(ans.command));
+        pos+=sizeof(ans.command);
+    memcpy(&TempMSV[pos], (char*)&ans.length, sizeof(ans.length));
+
+    int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
+
+    delete[] TempMSV;
+    return byteSend;
+}
+
 void dispatcher(CreatePort* port, char* buf, int len){
 
     // int32_t task;
@@ -589,16 +609,21 @@ void dispatcher(CreatePort* port, char* buf, int len){
 
         printf("packet.command = %u \n", packet.command);
     //=====проверка, реализована ли запрашиваемая функциональность==========================================
-    iter = std::find(CMD_ARRAY.begin(), CMD_ARRAY.end(), packet.command); // поиск поступившего номера задач среди реализованных
-        if (iter != CMD_ARRAY.end()){
-                std::cout << "Element Found" << std::endl;  //функционал реализован, выполняем
-                char* Msg= new char[100];
-                sprintf(Msg, "Task %u was found", packet.command);
-            if(flag_get_log){send_log_message(port,Msg, strlen("Msg"));}
-            delete[] Msg;
+    // iter = std::find(CMD_ARRAY.begin(), CMD_ARRAY.end(), packet.command); // поиск поступившего номера задач среди реализованных
+    //     if (iter != CMD_ARRAY.end()){
+    //             std::cout << "Element Found" << std::endl;  //функционал реализован, выполняем
+    //             char* Msg= new char[100];
+    //             sprintf(Msg, "Command %u was found", packet.command);
+    //         if(flag_get_log){send_log_message(port,Msg, strlen("Msg"));}
+    //         delete[] Msg;
             switch (packet.command)  //switch (task)
             {
-            case 0:    
+            case 0:
+                    printf("Problem with CLIENT\n");    //клиент отвалился
+                port->clt_sock->close();
+                CircBuffer->clearCircularBuffer();  /*переставляем индексы кольцевого буффера в начало*/
+                port->repeatConnect();  printf("new connection get\n");
+                flagAllowRecvFromPort=true;
                 // tcp_server_answer sServer_Answer;
 
                 // sServer_Answer.IDstm=100;
@@ -912,12 +937,17 @@ void dispatcher(CreatePort* port, char* buf, int len){
                 break;
             
             default:
+                    printf("Command: UNKNOWN %u\n", packet.command);
+                    char* Msg= new char[100];
+                    sprintf(Msg, "Command: UNKNOWN %u", packet.command);
+                    if(flag_get_log){send_log_message(port, Msg, strlen(Msg));}
+                    delete[] Msg;
                 break;
             }
-            delete[] packet.buff;
-        }else{
-            std::cout << "Element Not Found" << std::endl;      //такая задача не реализована
-        }
+            if(packet.buff !=NULL){printf("delete dyn buff\n"); delete[] packet.buff;}
+        // }else{
+        //     std::cout << "Element Not Found" << std::endl;      //такая задача не реализована
+        // }
     //===================================================================================================
  
   //  QueueTasks.pop();
