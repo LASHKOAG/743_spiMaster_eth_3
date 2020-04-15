@@ -49,6 +49,7 @@ using namespace std::chrono;
 #define PUSH_DATA_TO_ETH_FLAG (1U << 2)
 #define READY_TO_SEND_DATA_FLAG (1U << 3)
 #define STOP_PUSH_DATA_TO_ETH_FLAG (1U << 4)
+#define SHUTDOWN_FLAG (1U << 5)  //?
 
 // #define PRINT_VECTOR_FLAG (1U << 1)
 
@@ -79,6 +80,7 @@ bool flagAllowRecvFromPort=true;
 bool flag_cmd_check_answer = false;
 bool flag_busy_port=false;
 bool flag_get_log=false; // init false;
+time_t tShutdown=0; //время, в которое должно произойти выключение прибора
 
 char Recv_msv150[100];
 char Recv_msvTest[100];
@@ -94,6 +96,7 @@ Thread timeSignalPortThread;
 Thread resultTaskThread;
 Thread generalPortThread;
 Thread getCommandPortThread;
+Thread shutdownThread;
 //Thread portThread150;
 
 // TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
@@ -149,6 +152,17 @@ int8_t onOffLed()                                             // function for ch
     return 0;
 }
 
+void call_shutdownThread(){
+    while(1){
+        eventFlags.wait_all(SHUTDOWN_FLAG , osWaitForever, false);  //ждем флаг
+        time_t tNow = time(NULL);
+        if(tNow >= tShutdown){
+                printf("\n TURN OFF DEVICE\n");
+            tShutdown=0;
+            eventFlags.clear(SHUTDOWN_FLAG);
+        }
+    }
+}
 
 void drdyINHandlerRise()                                        //set flag after interrupt drdy
 {
@@ -540,15 +554,25 @@ int send_log_message(CreatePort* port, char* msg, int len)
     //int32_t len_send = sizeof(ans.command)+sizeof(ans.length) + len;
     int32_t len_send = sizeof(ans.command)+sizeof(ans.length) + strlen(msg);
     //int32_t byteSend = port->clt_sock->send(&ans, len_send);
-    char *TempMSV = new char[len_send];
+//-----------------------------------------------------------------------------------------
+    // char *TempMSV = new char[len_send];
+    // int32_t pos1=0;
+    // memcpy(&TempMSV[pos1], (char*)&ans.command, sizeof(ans.command));
+    //     pos1+=sizeof(ans.command);
+    // memcpy(&TempMSV[pos1], (char*)&ans.length, sizeof(ans.length));
+    //     pos1+=sizeof(ans.length);
+    // //memcpy(&TempMSV[pos1], (char*)&ans.buff[0], len);
+    // memcpy(&TempMSV[pos1], (char*)&ans.buff[0], strlen(msg));
+//---------------------------------------------------------------------------------------------
+    int8_t *TempMSV = new int8_t[len_send];
     int32_t pos1=0;
-    memcpy(&TempMSV[pos1], (char*)&ans.command, sizeof(ans.command));
+    memcpy(&TempMSV[pos1], (int8_t*)&ans.command, sizeof(ans.command));
         pos1+=sizeof(ans.command);
-    memcpy(&TempMSV[pos1], (char*)&ans.length, sizeof(ans.length));
+    memcpy(&TempMSV[pos1], (int8_t*)&ans.length, sizeof(ans.length));
         pos1+=sizeof(ans.length);
     //memcpy(&TempMSV[pos1], (char*)&ans.buff[0], len);
-    memcpy(&TempMSV[pos1], (char*)&ans.buff[0], strlen(msg));
-
+    memcpy(&TempMSV[pos1], (int8_t*)&ans.buff[0], strlen(msg));
+//------------------------------------------------------------------------------------------
     int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
         // printf("ans.command = %u\t", ans.command);
         // printf("ans.length = %u\t", ans.length);
@@ -607,7 +631,10 @@ void dispatcher(CreatePort* port, char* buf, int len){
         memcpy(&packet.buff[0], &buf[sizeof(packet.command)+sizeof(packet.length)], len-8);
     }
 
-        printf("packet.command = %u \n", packet.command);
+        printf("packet.command = %u \t", packet.command);
+        printf("\tpacket.buff =  %u\n", packet.buff[0]);
+
+        if(packet.command==658739){packet.command=3;} //заплатка для проверки функции
     //=====проверка, реализована ли запрашиваемая функциональность==========================================
     // iter = std::find(CMD_ARRAY.begin(), CMD_ARRAY.end(), packet.command); // поиск поступившего номера задач среди реализованных
     //     if (iter != CMD_ARRAY.end()){
@@ -619,16 +646,17 @@ void dispatcher(CreatePort* port, char* buf, int len){
             switch (packet.command)  //switch (task)
             {
             case 0:
-                    printf("Problem with CLIENT\n");    //клиент отвалился
+                    printf("Problem with CLIENT\n");    //клиент отвалился  packet.command == 0
                 port->clt_sock->close();
-                CircBuffer->clearCircularBuffer();  /*переставляем индексы кольцевого буффера в начало*/
+                CircBuffer->clearCircularBuffer();  //переставляем индексы кольцевого буффера в начало
                 port->repeatConnect();  printf("new connection get\n");
                 flagAllowRecvFromPort=true;
-                // tcp_server_answer sServer_Answer;
+                flag_get_log=false;
+                eventFlags.clear(SHUTDOWN_FLAG);
+                tShutdown=0;
 
-                // sServer_Answer.IDstm=100;
-                // sServer_Answer.in_command=0;
-                // sServer_Answer.out_command=1;
+                //hal_init()
+
                 // while(flag_busy_port == true){}  //ждем когда можно отправлять, порт занят другой задачей
                 // if(flag_busy_port==false){
                 //     flag_busy_port=true;
@@ -679,10 +707,95 @@ void dispatcher(CreatePort* port, char* buf, int len){
                 delete[] TempMSV;
                 break;
             }
+            case CMD_SHUTDOWN:{  //3
+                //!!!завершить работу программы и выключить прибор
+                    printf("Command: Shutdown\n");
+        	    if (!packet.buff) {
+                    if(flag_get_log){send_log_message(port,"Command: Shutdown - fault. No parameters.", strlen("Command: Shutdown - fault. No parameters."));}
+                    break;
+                }
+        	    time_t* tFromPacket;
+                tFromPacket = (time_t*)&packet.buff[0];
+                    printf("Command: Shutdown in time %d\n", *tFromPacket);  fflush(stdout);
+                
+                time_t tBoard = time(NULL);
+                    printf("Time on board was = %u\n", (unsigned int)tBoard);  fflush(stdout);
+
+        //	    t = (time_t*)&packet.buff[0];
+                    
+
+                if(flag_get_log){send_log_message(port,"Command: Shutdown", strlen("Command: Shutdown"));}
+                //заслать ответ
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                ans.length = sizeof(ans.command);
+                ans.buff = (char*)&packet.command;
+                //int cnt = send_packet(&ans);
+                //result_code = 2;
+                //Terminate();
+                int32_t len_send = sizeof(ans.command) + sizeof(ans.length) + sizeof(packet.command);
+                int8_t *TempMSV= new int8_t[len_send];
+                int32_t pos=0;
+                memcpy(&TempMSV[pos], (char*)&ans.command, sizeof(ans.command));
+                    pos+=sizeof(ans.command);
+                memcpy(&TempMSV[pos], (char*)&ans.length, sizeof(ans.length));
+                    pos+=sizeof(ans.length);
+                memcpy(&TempMSV[pos], (char*)&ans.buff[0], sizeof(packet.command));
+                    pos+=sizeof(packet.command);
+
+                port->clt_sock->send(&TempMSV[0], len_send);
+                
+                if(*tFromPacket <= tBoard){
+                    //вкл ножку на HIGH и откл питание
+                    if(flag_get_log){send_log_message(port,"Command: Shutdown now", strlen("Command: Shutdown now"));}
+                    printf("\nPIN is HIGH\n");
+                }else{
+                    tShutdown = *tFromPacket;       //установить время, когда выключится прибор. tShutdown - глобальная переменная
+                    eventFlags.set(SHUTDOWN_FLAG);  //поток shutdownThread ждет флага
+                    if(flag_get_log){send_log_message(port,"Command: Shutdown", strlen("Command: Shutdown"));}
+                }
+
+                delete[] TempMSV;
+                break;
+            }
+            case CMD_RESET:{  //4
+                //!!!перегрузка прибора
+        //	    if (!packet.buff) break;
+        //	    int* t;
+        //	    t = (int*)&packet.buff[0];
+                printf("Command: Reset\n");
+                //заслать ответ
+                tcp_packet_t ans;
+                memset(&ans, 0x00, sizeof(tcp_packet_t));
+                ans.command = CMD_ANSWER;
+                ans.length = sizeof(ans.command);
+                ans.buff = (char*)&packet.command;
+                //int cnt = send_packet(&ans);
+                //result_code = 1;
+                //Terminate();
+                int32_t len_send = sizeof(ans.command) + sizeof(ans.length) + sizeof(packet.command);
+                int8_t *TempMSV= new int8_t[len_send];
+                int32_t pos=0;
+                memcpy(&TempMSV[pos], (char*)&ans.command, sizeof(ans.command));
+                    pos+=sizeof(ans.command);
+                memcpy(&TempMSV[pos], (char*)&ans.length, sizeof(ans.length));
+                    pos+=sizeof(ans.length);
+                memcpy(&TempMSV[pos], (char*)&ans.buff[0], sizeof(packet.command));
+                    pos+=sizeof(packet.command);
+
+                port->clt_sock->send(&TempMSV[0], len_send);
+                //вкл ножку на HIGH и откл питание
+
+                delete[] TempMSV;
+                break;
+            }
             case CMD_HAL_INIT:{//complete //5
                     printf("Command: Init HAL\n");
                 if(flag_get_log){send_log_message(port,"Command: Init HAL", strlen("Command: Init HAL"));}
                 flag_get_log=false;
+                eventFlags.clear(SHUTDOWN_FLAG);
+                tShutdown=0;
                 // if (ts_task != NULL){
                 // printf("TIMESIGNAL ALREADY RUNNING!\n");
                 // int res = TCP_EC_TASK_IN_PROCESS;
@@ -811,7 +924,6 @@ void dispatcher(CreatePort* port, char* buf, int len){
             }
             case CMD_HAL_START_LOG:{//complete //10
                     printf("Command: Start log task\n");
-                flag_get_log=true;
                 int res;
                 /*if (log_task == NULL)
                 log_task = new CLogTask(this);
@@ -842,9 +954,14 @@ void dispatcher(CreatePort* port, char* buf, int len){
                 memcpy(&TempMSV[pos], &ans.buff[0], ans.length);
                 
                 int32_t byteSend = port->clt_sock->send(&TempMSV[0], len_send);
-
-                if(flag_get_log){send_log_message(port,"Logging was started", strlen("Logging was started"));}
                 
+                if(flag_get_log !=true){
+                    send_log_message(port,"Logging was started", strlen("Logging was started"));
+                    flag_get_log = true;
+                }else{
+                    send_log_message(port,"Logging is already go on", strlen("Logging is already go on"));
+                }
+
                 delete[] ans.buff;
                 delete[] TempMSV;
                 break;
@@ -938,13 +1055,15 @@ void dispatcher(CreatePort* port, char* buf, int len){
             
             default:
                     printf("Command: UNKNOWN %u\n", packet.command);
+                if(flag_get_log){
                     char* Msg= new char[100];
                     sprintf(Msg, "Command: UNKNOWN %u", packet.command);
-                    if(flag_get_log){send_log_message(port, Msg, strlen(Msg));}
+                    send_log_message(port, Msg, strlen(Msg));
                     delete[] Msg;
+                }
                 break;
             }
-            if(packet.buff !=NULL){printf("delete dyn buff\n"); delete[] packet.buff;}
+            if(packet.buff !=NULL){delete[] packet.buff;}
         // }else{
         //     std::cout << "Element Not Found" << std::endl;      //такая задача не реализована
         // }
@@ -1075,6 +1194,7 @@ int main()
                 spiThread.start(call_spiThread2);  //get data SPI from Slave equipment
                 getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));   //get command from general port
                 timeSignalPortThread.start(callback(call_timeSignalPortThread, PortConnect));   //send time Signal in ethernet port to client
+                shutdownThread.start(callback(call_shutdownThread));
                 // if(flag_cmd_check_answer){
                 //     printf("flag_cmd_check_answer\n");
                 //     f_cmd_check_connection(PortConnect);
