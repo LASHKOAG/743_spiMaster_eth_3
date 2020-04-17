@@ -31,15 +31,11 @@ queue1
 
 #include "platform/CircularBuffer.h"
 
-
-
 using namespace std::chrono;
-///////////////////////////////////////////////////////
-#define FLASH_KEY1               ((uint32_t)0x45670123)
-#define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
-///////////////////////////////////////////////////////
-
-
+// ///////////////////////////////////////////////////////
+// #define FLASH_KEY1               ((uint32_t)0x45670123)
+// #define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
+// ///////////////////////////////////////////////////////
 
 //#define BUF_SIZE    400
 #define MEMP_NUM_NETCONN 8
@@ -103,7 +99,7 @@ Thread getCommandPortThread;
 Thread shutdownThread;
 //Thread portThread150;
 
-FlashIAP flash;
+FlashIAP flash;  //write a variable in nonvolatile field (on flash)
 
 // TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
 // TCPSocket *clt_sock, *clt_sock150;
@@ -114,16 +110,13 @@ EventFlags eventFlags;
 //Thread signalPortThread;
 // CriticalSectionLock csLock;
 
-
 //map <char, char> myMap;
 vector <char> myVec;
 vector <string> myVec2;
     std::vector <int32_t> CMD_ARRAY; //вектор набора существующих задач
     std::vector<int32_t>::iterator iter;
 
-
 queue <string> QueueTasks;
-
 
 CircBuff *CircBuffer= new CircBuff();
 //-----------------------------------------------------------------------------------------------------------------------
