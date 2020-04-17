@@ -1,6 +1,6 @@
 /*
 743 spi master eth 3
-queue1
+flashBtn
 */
 
 #include "mbed.h"
