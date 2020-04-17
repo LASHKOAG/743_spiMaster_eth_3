@@ -34,12 +34,16 @@ queue1
 
 
 using namespace std::chrono;
-
+///////////////////////////////////////////////////////
+#define FLASH_KEY1               ((uint32_t)0x45670123)
+#define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
+///////////////////////////////////////////////////////
 
 
 
 //#define BUF_SIZE    400
 #define MEMP_NUM_NETCONN 8
+#define ADDRESS_MEMORY 0x08038500
 
 //CircularBuffer<int, BUF_SIZE> buf;
 //uint32_t bytes_written = 0;
@@ -98,6 +102,8 @@ Thread generalPortThread;
 Thread getCommandPortThread;
 Thread shutdownThread;
 //Thread portThread150;
+
+FlashIAP flash;
 
 // TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
 // TCPSocket *clt_sock, *clt_sock150;
@@ -383,6 +389,32 @@ int ethernetInterfaceInit()
         printf("\n======== step EthernetInterfaceFunction() ======================\n");  fflush(stdout);
         
     int resultEthSetNetwork = eth.set_network("192.168.4.177","255.255.255.0","192.168.4.1");   /* set network settings */
+        printf("Set Net: %d\r\n",resultEthSetNetwork);  fflush(stdout);
+    if(resultEthSetNetwork !=0){printf("Error NO set_network \n"); return -1;}
+
+    //int resEthConnect = -1;
+    //while(resEthConnect != 0){printf("into while \n");  resEthConnect = eth.connect(); printf("resEthConnect: %d\r\n",resEthConnect);}
+       // printf("after while \n"); return -1;
+    
+    if(eth.connect() !=0) {
+            printf("Error connecting \n");
+        return -1;
+    }else{
+            printf("\nstep eth.connect()\n");  fflush(stdout);
+        const char *ip = eth.get_ip_address();  // Show the network address
+            printf("The Server IP address is: %s\n", ip ? ip : "No IP");  fflush(stdout);
+            //printf("The Server IP address is '%s'\n", eth.get_ip_address());  fflush(stdout);
+        return 0;
+    }
+    
+}
+
+int ethernetInterfaceInit2()
+{
+        //EthernetInterface eth;
+        printf("\n======== step EthernetInterfaceFunction() ======================\n");  fflush(stdout);
+        
+    int resultEthSetNetwork = eth.set_network("192.168.4.100","255.255.255.0","192.168.4.1");   /* set network settings */
         printf("Set Net: %d\r\n",resultEthSetNetwork);  fflush(stdout);
     if(resultEthSetNetwork !=0){printf("Error NO set_network \n"); return -1;}
 
@@ -1154,7 +1186,87 @@ void call_getCommandPortThread(CreatePort *port){
     }
 }
 
+int32_t flash_write_data(char *page_buffer, uint32_t address)
+{
+    flash.init();
 
+    const uint32_t page_size = flash.get_page_size();
+        printf("page_size =  %u\n", page_size);  fflush(stdout);
+    //char *page_buffer = new char[page_size];
+            //memset(page_buffer, 0, sizeof(char) * page_size);
+            // page_buffer[0]=125; //for test
+            // page_buffer[1]=100; //for test
+            // page_buffer[2]=50; //for test
+
+            //page_buffer[0]='A'; //for test
+            //page_buffer[1]='B'; //for test
+            //page_buffer[2]='C'; //for test
+
+            //char page_buffer2[]="192.168.4.177"; //for test
+
+    uint32_t addr = address;
+    uint32_t next_sector = addr + flash.get_sector_size(addr);
+    bool sector_erased = false;
+    size_t pages_flashed = 0;
+    uint32_t percent_done = 0;
+    //while (true) {
+        // Erase this page if it hasn't been erased
+        if (!sector_erased) {
+            int32_t resultEraseFlash = flash.erase(addr, flash.get_sector_size(addr));
+                //printf("resultEraseFlash = %d\n", resultEraseFlash);
+            //if(resultEraseFlash < 0){ return -1;}//так делать не надо  
+            sector_erased = true;
+        }
+
+        // Program page
+        int32_t resultWriteFlash= flash.program(page_buffer, addr, page_size);
+        //if(resultWriteFlash < 0){ return -2;}
+            //flash.program(page_buffer2, addr, page_size);
+
+        addr += page_size;
+        if (addr >= next_sector) {
+            next_sector = addr + flash.get_sector_size(addr);
+            sector_erased = false;
+        }
+            printf("Flashed 100%%\r\n");
+    flash.deinit();
+
+    return 0;
+    /*example for to use
+        //main
+        char buf[14]="120.111.4.222";
+        int32_t res = flash_write_data(&buf[0], ADDRESS_MEMORY);  //0x08038500  //средствами mbed os
+        printf("res = %d\n",res);
+        //char buf2[strlen("120.111.4.222")+1]="";
+        //char* buf2="";
+        char buf2[14];
+        flash.read(buf2, ADDRESS_MEMORY, strlen("120.111.4.222"));
+            printf("buf2 s = %s\n",buf2);
+        for(int i=0; i<strlen("120.111.4.222"); ++i){
+            printf("buf2[%d] d = %d\n",i, buf2[i]);
+            printf("buf2[%d] c = %c\n",i, buf2[i]);
+        }
+
+
+        char tt = flash_read_2(ADDRESS_MEMORY);// 2ой способ
+            printf("tt = %u\n",tt);
+        char tt1 = flash_read_2(ADDRESS_MEMORY);
+            printf("tt1 = %u\n",tt1);
+
+        char testBuff[14]="";
+        testBuff[0]=flash_read_2(ADDRESS_MEMORY);
+        testBuff[1]=flash_read_2(ADDRESS_MEMORY+1);
+        testBuff[2]=flash_read_2(0x08038502);
+        testBuff[3]=flash_read_2(0x08038503);
+            printf("testBuff = %s\n",testBuff);
+*/
+}
+
+//int FlashIAP::read(void *buffer, uint32_t addr, uint32_t size) //1-ый способ чтения средствами: mbed os, FlashAPI; 
+
+uint32_t flash_read_2(uint32_t address) {  //2-ый способ чтения flash; 
+	return (*(__IO uint32_t*) address);
+}
 
 int main()
 {
@@ -1181,9 +1293,11 @@ int main()
     spi.format(8,3);        // Setup:  bit data, high steady state clock, 2nd edge capture
     spi.frequency(1000000); //1MHz
     int resEthInit = ethernetInterfaceInit();
+    // eth.disconnect(); //for test "Отключаю" интернет стек
+    //      printf(" eth.disconnect();\n");  //for test
+    // ethernetInterfaceInit2();  //for test Подключаю интернет стек с другими параметрами
+    //      printf(" eth.connect();\n");  //for test
 
-
-    
 
     //CreatePort *PortConnect = new CreatePort(eth, 80);
     //if(resEthInit==0 && PortConnect->flagReadyPort==true){
@@ -1234,6 +1348,62 @@ int main()
     }
     //delete PortConnect;
 }
+
+/*
+void flash_unlock(void) {
+	  FLASH->KEYR1 = FLASH_KEY1;
+	  FLASH->KEYR1 = FLASH_KEY2;
+}
+
+//pageAddress - любой адрес, принадлежащий стираемой странице
+void Internal_Flash_Erase(unsigned int pageAddress) {
+	while (FLASH->SR2 & FLASH_SR_BSY);
+	if (FLASH->SR2 & FLASH_SR_EOP) {
+		FLASH->SR2 = FLASH_SR_EOP;
+	}
+printf("\n======== 1-Erase ======================\n");  fflush(stdout);
+	//FLASH->CR1 |= FLASH_CR_PER;
+    FLASH->CR2 |= FLASH->OPTCCR; printf("\n======== 2-Erase ======================\n");  fflush(stdout);
+	FLASH->PRAR_CUR2 = pageAddress; printf("\n======== 3-Erase ======================\n");  fflush(stdout);
+	//FLASH->CR1 |= FLASH_CR_STRT;
+    FLASH->CR2 |= (0x1U << 6U);  printf("\n======== 4-Erase ======================\n");  fflush(stdout);
+	//while (!(FLASH->SR1 & FLASH_SR_EOP));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
+    //while (!(FLASH->SR1 & (0x1UL << 16U)));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
+	while (!(FLASH->SR2 & FLASH_SR_BSY));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
+    FLASH->SR2 = FLASH_SR_EOP;  printf("\n======== 6-Erase ======================\n");  fflush(stdout);
+	//FLASH->CR1 &= ~FLASH_CR_PER;
+    FLASH->CR2 &= ~FLASH->OPTCCR;  printf("\n======== 7-Erase ======================\n");  fflush(stdout);
+}
+
+void flash_lock() {
+	FLASH->CR2 |= FLASH_CR_LOCK;
+}
+
+void Internal_Flash_Write(unsigned char* data, unsigned int address, unsigned int count) {
+	unsigned int i;
+printf("\n======== 1-Internal_Flash_Write ======================\n");  fflush(stdout);
+	while (FLASH->SR2 & FLASH_SR_BSY);
+	if (FLASH->SR2 & FLASH_SR_EOP) {
+		FLASH->SR2 = FLASH_SR_EOP;
+	}
+printf("\n======== 2-Internal_Flash_Write ======================\n");  fflush(stdout);
+	FLASH->CR2 |= FLASH_CR_PG;
+
+	for (i = 0; i < count; i += 2) {
+		*(volatile unsigned short*)(address + i) = (((unsigned short)data[i + 1]) << 8) + data[i];
+		while (!(FLASH->SR2 & FLASH_SR_EOP));
+		FLASH->SR2 = FLASH_SR_EOP;
+	}
+
+	FLASH->CR2 &= ~(FLASH_CR_PG);
+}
+
+uint32_t flash_read(uint32_t address) {
+	return (*(__IO uint32_t*) address);
+}
+*/
+
+
 
     //std::vector<int>::difference_type index = std::distance(CMD_ARRAY.begin(), iter);
 
