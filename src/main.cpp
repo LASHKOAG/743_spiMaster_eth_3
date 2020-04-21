@@ -31,11 +31,11 @@ flashBtn
 
 #include "platform/CircularBuffer.h"
 
+#include "writereadflash.h"
+#include "buttonclass.h"
+
 using namespace std::chrono;
-// ///////////////////////////////////////////////////////
-// #define FLASH_KEY1               ((uint32_t)0x45670123)
-// #define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
-// ///////////////////////////////////////////////////////
+
 
 //#define BUF_SIZE    400
 #define MEMP_NUM_NETCONN 8
@@ -89,6 +89,7 @@ char Recv_msvTest3[100];
 
 SPI spi(PD_7, PA_6, PA_5, PA_4); // mosi, miso, sclk, ssel
 DigitalOut chipSelect(PA_4);
+//DigitalIn btn_in(PG_3);
 InterruptIn drdyIN(PE_3);
 
 Thread spiThread;
@@ -97,9 +98,7 @@ Thread resultTaskThread;
 Thread generalPortThread;
 Thread getCommandPortThread;
 Thread shutdownThread;
-//Thread portThread150;
-
-FlashIAP flash;  //write a variable in nonvolatile field (on flash)
+Thread changeInfoFlashThread;
 
 // TCPSocket srv, srv150;  //TCPServer was migrate to TCPSocket
 // TCPSocket *clt_sock, *clt_sock150;
@@ -149,6 +148,24 @@ int8_t onOffLed()                                             // function for ch
         wait_ms(100);
     }
     return 0;
+}
+
+void call_changeInfoFlashThread(){
+    ButtonClass *btnChangeFlashInfo = new ButtonClass(PG_3, PullUp);
+    WriteReadFlash *workWithFlash = new WriteReadFlash();
+        char buf[14]="99.33.4.222"; //для отладки
+        char buf2[14];  //для отладки
+    while(1){
+        if(btnChangeFlashInfo->check_onPressed_btn()==0){
+                    printf("\n 4-call_changeInfoFlashThread() \n");  //для отладки
+            workWithFlash->flash_write_data(&buf[0], ADDRESS_MEMORY);
+                    workWithFlash->flash.read(buf2, ADDRESS_MEMORY, strlen("120.111.4.222"));  //для отладки
+                    printf("buf2 s = %s\n",buf2);   //для отладки
+        }
+    }
+
+    delete btnChangeFlashInfo;
+    delete workWithFlash;
 }
 
 void call_shutdownThread(){
@@ -735,18 +752,18 @@ void dispatcher(CreatePort* port, char* buf, int len){
             case CMD_SHUTDOWN:{  //3
                 //!!!завершить работу программы и выключить прибор
                     printf("Command: Shutdown\n");
-        	    if (!packet.buff) {
+                if (!packet.buff) {
                     if(flag_get_log){send_log_message(port,"Command: Shutdown - fault. No parameters.", strlen("Command: Shutdown - fault. No parameters."));}
                     break;
                 }
-        	    time_t* tFromPacket;
+                time_t* tFromPacket;
                 tFromPacket = (time_t*)&packet.buff[0];
                     printf("Command: Shutdown in time %d\n", *tFromPacket);  fflush(stdout);
                 
                 time_t tBoard = time(NULL);
                     printf("Time on board was = %u\n", (unsigned int)tBoard);  fflush(stdout);
 
-        //	    t = (time_t*)&packet.buff[0];
+        //      t = (time_t*)&packet.buff[0];
                     
 
                 if(flag_get_log){send_log_message(port,"Command: Shutdown", strlen("Command: Shutdown"));}
@@ -786,9 +803,9 @@ void dispatcher(CreatePort* port, char* buf, int len){
             }
             case CMD_RESET:{  //4
                 //!!!перегрузка прибора
-        //	    if (!packet.buff) break;
-        //	    int* t;
-        //	    t = (int*)&packet.buff[0];
+        //      if (!packet.buff) break;
+        //      int* t;
+        //      t = (int*)&packet.buff[0];
                 printf("Command: Reset\n");
                 //заслать ответ
                 tcp_packet_t ans;
@@ -1178,7 +1195,7 @@ void call_getCommandPortThread(CreatePort *port){
 
     }
 }
-
+/*
 int32_t flash_write_data(char *page_buffer, uint32_t address)
 {
     flash.init();
@@ -1253,17 +1270,29 @@ int32_t flash_write_data(char *page_buffer, uint32_t address)
         testBuff[3]=flash_read_2(0x08038503);
             printf("testBuff = %s\n",testBuff);
 */
-}
+//}
 
 //int FlashIAP::read(void *buffer, uint32_t addr, uint32_t size) //1-ый способ чтения средствами: mbed os, FlashAPI; 
 
 uint32_t flash_read_2(uint32_t address) {  //2-ый способ чтения flash; 
-	return (*(__IO uint32_t*) address);
+    return (*(__IO uint32_t*) address);
 }
+
+
 
 int main()
 {
         printf("\n======== 1-start ======================\n");  fflush(stdout);
+
+            // check mypin object is initialized and connected to a pin
+    // if(btn_in.is_connected()) {
+    //     printf("mypin is connected and initialized! \n\r");
+    // }
+    // btn_in.mode(PullUp); //init()
+    changeInfoFlashThread.start(callback(call_changeInfoFlashThread));
+    
+
+
     //===================================================================================================
     for( int32_t i=2; i<16; ++i){
        CMD_ARRAY.push_back(i);
@@ -1302,6 +1331,7 @@ int main()
                 getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));   //get command from general port
                 timeSignalPortThread.start(callback(call_timeSignalPortThread, PortConnect));   //send time Signal in ethernet port to client
                 shutdownThread.start(callback(call_shutdownThread));
+                
                 // if(flag_cmd_check_answer){
                 //     printf("flag_cmd_check_answer\n");
                 //     f_cmd_check_connection(PortConnect);
@@ -1331,7 +1361,9 @@ int main()
     }
     */
     while(1){
-        // printf("1111\n");
+         //printf("1111\n");
+
+
         // printf("flag_cmd_check_answer = %d\n",flag_cmd_check_answer);
         //         if(flag_cmd_check_answer){
         //             printf("flag_cmd_check_answer\n");
@@ -1342,57 +1374,91 @@ int main()
     //delete PortConnect;
 }
 
+/*=========test button press==========================
+InterruptIn button1(PG_2);
+volatile bool button1_pressed = false; // Used in the main loop
+volatile bool button1_enabled = true; // Used for debouncing
+Timeout button1_timeout; // Used for debouncing
+
+// Enables button when bouncing is over
+void button1_enabled_cb(void)
+{
+    button1_enabled = true;
+}
+
+// ISR handling button pressed event
+void button1_onpressed_cb(void)
+{
+    if (button1_enabled) { // Disabled while the button is bouncing
+        button1_enabled = false;
+        button1_pressed = true; // To be read by the main loop
+        button1_timeout.attach(callback(button1_enabled_cb), 0.3); // Debounce time 300 ms
+    }
+}
+
+//main
+    button1.mode(PullUp); // Activate pull-up
+    button1.fall(callback(button1_onpressed_cb)); // Attach ISR to handle button press event
+
+while(1){
+         if (button1_pressed) { // Set when button is pressed
+             button1_pressed = false;
+             printf("Button pressed \n" );
+             ///led1 = !led1;
+         }
+}
+=========test button press==========================*/
 /*
 void flash_unlock(void) {
-	  FLASH->KEYR1 = FLASH_KEY1;
-	  FLASH->KEYR1 = FLASH_KEY2;
+      FLASH->KEYR1 = FLASH_KEY1;
+      FLASH->KEYR1 = FLASH_KEY2;
 }
 
 //pageAddress - любой адрес, принадлежащий стираемой странице
 void Internal_Flash_Erase(unsigned int pageAddress) {
-	while (FLASH->SR2 & FLASH_SR_BSY);
-	if (FLASH->SR2 & FLASH_SR_EOP) {
-		FLASH->SR2 = FLASH_SR_EOP;
-	}
+    while (FLASH->SR2 & FLASH_SR_BSY);
+    if (FLASH->SR2 & FLASH_SR_EOP) {
+        FLASH->SR2 = FLASH_SR_EOP;
+    }
 printf("\n======== 1-Erase ======================\n");  fflush(stdout);
-	//FLASH->CR1 |= FLASH_CR_PER;
+    //FLASH->CR1 |= FLASH_CR_PER;
     FLASH->CR2 |= FLASH->OPTCCR; printf("\n======== 2-Erase ======================\n");  fflush(stdout);
-	FLASH->PRAR_CUR2 = pageAddress; printf("\n======== 3-Erase ======================\n");  fflush(stdout);
-	//FLASH->CR1 |= FLASH_CR_STRT;
+    FLASH->PRAR_CUR2 = pageAddress; printf("\n======== 3-Erase ======================\n");  fflush(stdout);
+    //FLASH->CR1 |= FLASH_CR_STRT;
     FLASH->CR2 |= (0x1U << 6U);  printf("\n======== 4-Erase ======================\n");  fflush(stdout);
-	//while (!(FLASH->SR1 & FLASH_SR_EOP));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
+    //while (!(FLASH->SR1 & FLASH_SR_EOP));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
     //while (!(FLASH->SR1 & (0x1UL << 16U)));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
-	while (!(FLASH->SR2 & FLASH_SR_BSY));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
+    while (!(FLASH->SR2 & FLASH_SR_BSY));  printf("\n======== 5-Erase ======================\n");  fflush(stdout);
     FLASH->SR2 = FLASH_SR_EOP;  printf("\n======== 6-Erase ======================\n");  fflush(stdout);
-	//FLASH->CR1 &= ~FLASH_CR_PER;
+    //FLASH->CR1 &= ~FLASH_CR_PER;
     FLASH->CR2 &= ~FLASH->OPTCCR;  printf("\n======== 7-Erase ======================\n");  fflush(stdout);
 }
 
 void flash_lock() {
-	FLASH->CR2 |= FLASH_CR_LOCK;
+    FLASH->CR2 |= FLASH_CR_LOCK;
 }
 
 void Internal_Flash_Write(unsigned char* data, unsigned int address, unsigned int count) {
-	unsigned int i;
+    unsigned int i;
 printf("\n======== 1-Internal_Flash_Write ======================\n");  fflush(stdout);
-	while (FLASH->SR2 & FLASH_SR_BSY);
-	if (FLASH->SR2 & FLASH_SR_EOP) {
-		FLASH->SR2 = FLASH_SR_EOP;
-	}
+    while (FLASH->SR2 & FLASH_SR_BSY);
+    if (FLASH->SR2 & FLASH_SR_EOP) {
+        FLASH->SR2 = FLASH_SR_EOP;
+    }
 printf("\n======== 2-Internal_Flash_Write ======================\n");  fflush(stdout);
-	FLASH->CR2 |= FLASH_CR_PG;
+    FLASH->CR2 |= FLASH_CR_PG;
 
-	for (i = 0; i < count; i += 2) {
-		*(volatile unsigned short*)(address + i) = (((unsigned short)data[i + 1]) << 8) + data[i];
-		while (!(FLASH->SR2 & FLASH_SR_EOP));
-		FLASH->SR2 = FLASH_SR_EOP;
-	}
+    for (i = 0; i < count; i += 2) {
+        *(volatile unsigned short*)(address + i) = (((unsigned short)data[i + 1]) << 8) + data[i];
+        while (!(FLASH->SR2 & FLASH_SR_EOP));
+        FLASH->SR2 = FLASH_SR_EOP;
+    }
 
-	FLASH->CR2 &= ~(FLASH_CR_PG);
+    FLASH->CR2 &= ~(FLASH_CR_PG);
 }
 
 uint32_t flash_read(uint32_t address) {
-	return (*(__IO uint32_t*) address);
+    return (*(__IO uint32_t*) address);
 }
 */
 
@@ -1635,3 +1701,7 @@ void getCommandFromPort(char* ptr_recv_msv)
     }
 }
 */
+// ///////////////////////////////////////////////////////
+// #define FLASH_KEY1               ((uint32_t)0x45670123)
+// #define FLASH_KEY2               ((uint32_t)0xCDEF89AB)
+// ///////////////////////////////////////////////////////
