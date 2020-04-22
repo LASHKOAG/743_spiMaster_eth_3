@@ -1,6 +1,6 @@
 /*
 743 spi master eth 3
-master 22/04/2020
+ts1 22/04/2020
 */
 
 #include "mbed.h"
