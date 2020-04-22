@@ -1,6 +1,6 @@
 //------------------------------------------------------------------
-#ifndef SOCKET_STRUCT_H
-#define SOCKET_STRUCT_H
+#ifndef SOCKET_STRUCT_WIDE_H
+#define SOCKET_STRUCT_WIDE_H
 //------------------------------------------------------------------
 // #ifdef __uClinux__
 // #include <sys/time.h>
@@ -187,47 +187,47 @@
 //��������� ������ TCP
 typedef struct 
 {
-	unsigned int command;
-	unsigned int length;
+	uint32_t command;
+	uint32_t length;
 	char* buff;
 }tcp_packet_t;
 //------------------------------------------------------------------
 //��������� ��������� ������ �� ������ ���������� �������
 typedef struct 
 {
-	unsigned short channel; //����� (0-3)
-	unsigned short subchannel; //����� �������������� (0-7)
-	unsigned short freq_channel; //����� �� 0,1
-	unsigned short sensor; //����� ������� TCP_SENSOR_
-	unsigned short secs; //����� ������ � ��������
-	unsigned short gsm; //��� ������ ������������ �������� TCP_GSM_XXX
+	uint16_t channel; //����� (0-3)
+	uint16_t subchannel; //����� �������������� (0-7)
+	uint16_t freq_channel; //����� �� 0,1
+	uint16_t sensor; //����� ������� TCP_SENSOR_
+	uint16_t secs; //����� ������ � ��������
+	uint16_t gsm; //��� ������ ������������ �������� TCP_GSM_XXX
 	float req_gain; //����������� �������� ��� ������� ������ �������
 }ts_channel_t;
 //��������� ���� ������� �� ������ ���������� �������
 typedef struct
 {
-	unsigned short begin_pause; //��������� ����� ����� �������
-	unsigned short num_ch; //����� ������� ��� ������ (�� ������ 4�)
+	uint16_t begin_pause; //��������� ����� ����� �������
+	uint16_t num_ch; //����� ������� ��� ������ (�� ������ 4�)
 	ts_channel_t* ch; //������ �������� �������
 }ts_task_t;
 //------------------------------------------------------------------
 //���������� ���������� (�����)
 typedef struct 
 {
-	unsigned short id;
-	unsigned short dev_lib_version;
-	unsigned short interface_version;
-	unsigned short server_version;
-	unsigned int len_dev_name;
+	uint16_t id;
+	uint16_t dev_lib_version;
+	uint16_t interface_version;
+	uint16_t server_version;
+	uint32_t len_dev_name;
 	char* dev_name;
 }tcp_hal_desc_t;
 //------------------------------------------------------------------
 //��������� ��������� ������������� �������
 typedef struct
 {	
-	unsigned short channel; //����� (0-3)
-	unsigned short subchannel; //������������� (0-7)
-	unsigned short sensor; //�����
+	uint16_t channel; //����� (0-3)
+	uint16_t subchannel; //������������� (0-7)
+	uint16_t sensor; //�����
 	short volume; //���������
 	float sensitivity; //����������������
 	float dc_min; //����������� �������� ��������� ��� �������� �������������� �������
@@ -237,11 +237,11 @@ typedef struct
 //��������� ��������� ������ HSMF ��� ������ DSA
 typedef struct
 {
-	unsigned long id_dsa_task;
-	unsigned short channel; //����� (0-3)
-	unsigned short subchannel; //����� �������������� (0-7)
-	unsigned short sensor; //����� TCP_SENSOR_XXX
-	unsigned short gsm; //��� ������ ������������ �������� TCP_GSM_XXX
+	uint32_t id_dsa_task;
+	uint16_t channel; //����� (0-3)
+	uint16_t subchannel; //����� �������������� (0-7)
+	uint16_t sensor; //����� TCP_SENSOR_XXX
+	uint16_t gsm; //��� ������ ������������ �������� TCP_GSM_XXX
 	float req_gain; //����������� �������� ��� ������� ������ �������
 	float sensitivity; //����������������
 	float dc_min; //����������� ���������
@@ -251,8 +251,8 @@ typedef struct
 //��������� ��������� ������ ������� �������� ��� ������ DSA
 typedef struct
 {
-	unsigned long id_dsa_task;
-	unsigned short channel; //����� �� 1,2
+	uint32_t id_dsa_task;
+	uint16_t channel; //����� �� 1,2
 	short labels; //���������� �����
 }freq_channel_t;
 //------------------------------------------------------------------
@@ -309,15 +309,15 @@ typedef struct
 //��������� ��������� ��������� ��������� �������
 typedef struct 
 {
-	unsigned long id_dsa_task;
-	unsigned short spectrum_type; //��� �������
-	unsigned short hsmf_channel; //������ ������ HSMF
-	unsigned short freq_channel; //������ ������ ������� ��������
-	unsigned short decimation; //���
-	unsigned short envelope; //��
-	unsigned short spec_res; //����������
-	unsigned short averaging_num; //���������� ����������
-	unsigned short stab_control; //������������
+	uint32_t id_dsa_task;
+	uint16_t spectrum_type; //��� �������
+	uint16_t hsmf_channel; //������ ������ HSMF
+	uint16_t freq_channel; //������ ������ ������� ��������
+	uint16_t decimation; //���
+	uint16_t envelope; //��
+	uint16_t spec_res; //����������
+	uint16_t averaging_num; //���������� ����������
+	uint16_t stab_control; //������������
 	float rot_spd_min; //����������� �������� �������� � ��
 	float rot_spd_max; //������������ �������� �������� � ��
 	float rscm_realization; //����������� ���������� ��������� ������� �������� �� ����������
@@ -327,10 +327,10 @@ typedef struct
 //��������� ��������� ��������� ���������� ������� ���������
 typedef struct
 {
-	unsigned long id_dsa_task;
-	unsigned short hsmf_channel; //������ ������ HSMF
-	unsigned short averaging_num; //���������� ����������
-	unsigned long time; //����������� ��������� ���������� ��� ������, ��
+	uint32_t id_dsa_task;
+	uint16_t hsmf_channel; //������ ������ HSMF
+	uint16_t averaging_num; //���������� ����������
+	uint32_t time; //����������� ��������� ���������� ��� ������, ��
 	float coef_cover; //����������� ���������� ����������
 }kurtosis_subtask_t;
 //------------------------------------------------------------------
@@ -340,9 +340,9 @@ typedef struct
 #define GOST_VSKZ_TO_HZ		1000.0
 typedef struct
 {
-	unsigned long id_dsa_task;
-	unsigned short hsmf_channel; //������ ������ HSMF
-	unsigned short averaging_num; //���������� ����������
+	uint32_t id_dsa_task;
+	uint16_t hsmf_channel; //������ ������ HSMF
+	uint16_t averaging_num; //���������� ����������
 	float from_hz;	//������ ������ ��
 	float to_hz;	//������ ������ ��
 }std_integ_subtask_t;
@@ -350,54 +350,54 @@ typedef struct
 //��������� ��������� ��������� ���������� �������������� ������ �� ���������� �������
 typedef struct
 {
-	unsigned long id_dsa_task;
-	unsigned short hsmf_channel; //������ ������ HSMF
-	unsigned short aligned_field;
-	unsigned long time; //��������� ���������� ��� ���������� ������
+	uint32_t id_dsa_task;
+	uint16_t hsmf_channel; //������ ������ HSMF
+	uint16_t aligned_field;
+	uint32_t time; //��������� ���������� ��� ���������� ������
 }calc_subtask_t;
 //------------------------------------------------------------------
 //��������� ��������� ��������� ��������� ��������� ��������
 typedef struct
 {
-	unsigned long id_dsa_task;
-	unsigned short hsmf_channel; //������ ������ HSMF
-	unsigned short freq_channel; //������ ������ ������� ��������
-	unsigned short measure_num; //���������� ���������
-	unsigned short averaging_num; //���������� ����������
+	uint32_t id_dsa_task;
+	uint16_t hsmf_channel; //������ ������ HSMF
+	uint16_t freq_channel; //������ ������ ������� ��������
+	uint16_t measure_num; //���������� ���������
+	uint16_t averaging_num; //���������� ����������
 	float rot_spd_min; //����������� �������� �������� � ��
 	float rot_spd_max; //������������ �������� �������� � ��
-	unsigned short vector_num; //���������� ������� � �������� ������� (��������)
-	unsigned short aligned_field; //������������� ����
+	uint16_t vector_num; //���������� ������� � �������� ������� (��������)
+	uint16_t aligned_field; //������������� ����
 }vector_frot_subtask_t;
 //------------------------------------------------------------------
 //��������� ��������� ��������� ��������� ������ ���������� �������
 typedef struct
 {
-	unsigned long id_dsa_task;
+	uint32_t id_dsa_task;
 }timesignal_subtask_t;
 //------------------------------------------------------------------
 //��������� ��������� ����������� ��������
 typedef struct 
 {
-	unsigned short channel;	//����� (0,1)
-	unsigned short labels; //���������� �����
-	unsigned long observation_time; //����� ���������� (0 - ���� �� ����������) 
-	unsigned long callback_period; //������ ����������
+	uint16_t channel;	//����� (0,1)
+	uint16_t labels; //���������� �����
+	uint32_t observation_time; //����� ���������� (0 - ���� �� ����������) 
+	uint32_t callback_period; //������ ����������
 }freq_monitor_t;
 //------------------------------------------------------------------
 //��������� ��������� ����������� ����������
 typedef struct 
 {
-	unsigned short channel; //����� (0-3)
-	unsigned short subchannel; //������������� (0-7)
-	unsigned short sensor; //�����
-	unsigned short gain; //��� ��������
+	uint16_t channel; //����� (0-3)
+	uint16_t subchannel; //������������� (0-7)
+	uint16_t sensor; //�����
+	uint16_t gain; //��� ��������
 	float sensitivity; //����������������
 	float manual_gain; //�������� ��� ������ ������
 	float dc_min; //����������� �������� ��������� ��� �������� �������������� �������
 	float dc_max; //������������ �������� ��������� ��� �������� �������������� �������
-	unsigned long observation_time; //����� ���������� (0 - ���� �� ����������)
-	unsigned long realization_time; //����� ����������
+	uint32_t observation_time; //����� ���������� (0 - ���� �� ����������)
+	uint32_t realization_time; //����� ����������
 }stat_monitor_t;
 //------------------------------------------------------------------
 // ������ ������������� ��������� � �����
@@ -423,7 +423,7 @@ typedef struct {
 	float last_value;
 	timeval first_time;
 	float mean_value;
-	int values_num;
+	int32_t values_num;
 }monitor_result_t;
 //------------------------------------------------------------------
 //��������� ����������� �������������� ������ �������
@@ -443,83 +443,83 @@ typedef struct {
 //��������� ���������
 typedef struct
 {
-	int size;
-	int version;
-	unsigned long id_dsa_task; //������������� ������
-	unsigned int subtask_num; //����� ��������
-	int state; //��������� ������
-	unsigned long warnings; //��������������
-	int error_code; //��� ������������
+	int32_t size;
+	int32_t version;
+	uint32_t id_dsa_task; //������������� ������
+	uint32_t subtask_num; //����� ��������
+	int32_t state; //��������� ������
+	uint32_t warnings; //��������������
+	int32_t error_code; //��� ������������
 }dsa_header_t;
 //------------------------------------------------------------------
 //��������� ��������� ��������� DSA
 typedef struct 
 {
-	int size;
-	int version;
-	unsigned int type; //��� ���������
-	int error_code; //��� ������������
-	unsigned long warnings; //��������������
-	unsigned int result_size; //������ ��������� � �����������
+	int32_t size;
+	int32_t version;
+	uint32_t type; //��� ���������
+	int32_t error_code; //��� ������������
+	uint32_t warnings; //��������������
+	uint32_t result_size; //������ ��������� � �����������
 }dsa_subtask_t;
 //------------------------------------------------------------------
 //��������� ��������� ��������� �������
 typedef struct 
 {
-	int size;
-	int version;
-	int idx_subtask;
+	int32_t size;
+	int32_t version;
+	int32_t idx_subtask;
 	float average_freq;
 	float freq_step;
 	float gain;
-	unsigned short spectrum_type;
-	unsigned short decimation;
-	unsigned short envelope;
-	unsigned short spec_res;
-	unsigned short averaging_num;
-	unsigned short sensor;
+	uint16_t spectrum_type;
+	uint16_t decimation;
+	uint16_t envelope;
+	uint16_t spec_res;
+	uint16_t averaging_num;
+	uint16_t sensor;
 	float sensitivity;
-	unsigned int sp_len;
+	uint32_t sp_len;
 	float* spectrum;
 }result_spectrum_t;
 //------------------------------------------------------------------
 //��������� ��������� ���������� ��������� ������� ���������
 typedef struct
 {
-	int size;
-	int version;
-	int idx_subtask;
+	int32_t size;
+	int32_t version;
+	int32_t idx_subtask;
 	float mean;
 	float std;
 	float gain;
-	unsigned long time;
+	uint32_t time;
 	float coef_cover;
-	unsigned short averaging_num;
-	unsigned short sensor;
+	uint16_t averaging_num;
+	uint16_t sensor;
 	float sensitivity;
 }result_kurtosis_t;
 //------------------------------------------------------------------
 //��������� ��������� ���������� ��� ���������������� ������� (�������������)
 typedef struct
 {
-	int size;
-	int version;
-	int idx_subtask;
+	int32_t size;
+	int32_t version;
+	int32_t idx_subtask;
 	float std_integ; //���������
 	float gain;
 	float from_Hz;
 	float to_Hz;
-	unsigned short averaging_num;
-	unsigned short sensor;
+	uint16_t averaging_num;
+	uint16_t sensor;
 	float sensitivity;
 }result_std_integ_t;
 //------------------------------------------------------------------
 //��������� ��������� �������������� ������ ���������� �������
 typedef struct
 {
-	int size;
-	int version;
-	int idx_subtask;
+	int32_t size;
+	int32_t version;
+	int32_t idx_subtask;
 	float min;//���������
 	float max;//���������
 	float mean;//���������
@@ -527,9 +527,9 @@ typedef struct
 	float kurtosis;//���������
 	float peak_factor;//���������
 	float gain;//���������
-	unsigned long time;
-	unsigned short sensor;
-	unsigned short aligned_field;
+	uint32_t time;
+	uint16_t sensor;
+	uint16_t aligned_field;
 	float sensitivity;
 }result_calc_t;
 //------------------------------------------------------------------
@@ -544,25 +544,25 @@ typedef struct
 #define IS_VALID_FALSE		0
 typedef struct
 {
-	unsigned short harm_num;
-	unsigned short is_valid;
+	uint16_t harm_num;
+	uint16_t is_valid;
 	float f_rot;
 	float aver_ampl;
 	float aver_phase;
-	unsigned int measure_num;
+	uint32_t measure_num;
 	vector_t* measure;
 }vector_frot_t;
 //��������� ��������� ���������� �������� ��������
 typedef struct 
 {
-	int size;
-	int version;
-	int idx_subtask;
+	int32_t size;
+	int32_t version;
+	int32_t idx_subtask;
 	float f_rot;//���������
 	float gain;//���������
-	unsigned short vector_num;//���������
-	unsigned short averaging_num;//���������
-	unsigned short sensor;
+	uint16_t vector_num;//���������
+	uint16_t averaging_num;//���������
+	uint16_t sensor;
 	float sensitivity;
 	vector_frot_t* f_rot_vector;//���������
 }result_vector_frot_t;
@@ -570,8 +570,8 @@ typedef struct
 //��������� ���������� ���������
 typedef struct
 {
-	int idx_subtask;
-	unsigned int type;
+	int32_t idx_subtask;
+	uint32_t type;
 	union{
 		result_spectrum_t spectrum;
 		result_kurtosis_t kurtosis;
@@ -583,12 +583,12 @@ typedef struct
 //------------------------------------------------------------------
 typedef struct 
 {
-	unsigned int channel;
-	int ec;
+	uint32_t channel;
+	int32_t ec;
 	float gain;
-	unsigned int all_samples;
-	unsigned int wrote_samples;
-	unsigned int wrote_labels;
+	uint32_t all_samples;
+	uint32_t wrote_samples;
+	uint32_t wrote_labels;
 }ts_progress_t;
 //------------------------------------------------------------------
 #define FD_DAT		1
@@ -598,40 +598,40 @@ typedef struct
 //������ ������� 3, 4
 typedef struct
 {
-	unsigned int channel;
-	unsigned int type;
-	unsigned int block_size;
-	unsigned int cnt_block;
-	unsigned long file_size;
+	uint32_t channel;
+	uint32_t type;
+	uint32_t block_size;
+	uint32_t cnt_block;
+	uint32_t file_size;
 }ts_filedesc_t;
 //------------------------------------------------------------------
 //������ ������� 5
 typedef struct
 {
-	unsigned int adc_channel;
-	unsigned int sub_channel;
-	unsigned int freq_channel;
+	uint32_t adc_channel;
+	uint32_t sub_channel;
+	uint32_t freq_channel;
 	float gain;
 	float gain_p3;
 }ts_begin_t;
 
 typedef struct
 {
-	unsigned int type;
-	unsigned int channel;
-	unsigned int length;
+	uint32_t type;
+	uint32_t channel;
+	uint32_t length;
 	char* buffer;
 }ts_buffer_t;
 
 typedef struct  
 {
-	int ec;
-	unsigned int adc_channel;
-	unsigned int sub_channel;
-	unsigned int freq_channel;
-	unsigned int all_samples;
-	unsigned int wrote_samples;
-	unsigned int wrote_labels;
+	int32_t ec;
+	uint32_t adc_channel;
+	uint32_t sub_channel;
+	uint32_t freq_channel;
+	uint32_t all_samples;
+	uint32_t wrote_samples;
+	uint32_t wrote_labels;
 	float gain;
 	float gain_p3;
 }ts_end_t;

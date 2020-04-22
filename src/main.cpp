@@ -19,7 +19,8 @@ ts1 22/04/2020
 #include <math.h>
 //#include "chrono_io"
 #include <queue>
-#include "socket_struct.h"
+//#include "socket_struct.h"
+#include "socket_struct_wide.h"
 //#include <map>    //подключили библиотеку для работы с map
 #include <algorithm>
 //#include <unistd.h>
