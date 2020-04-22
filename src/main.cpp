@@ -33,13 +33,14 @@ flashBtn
 
 #include "writereadflash.h"
 #include "buttonclass.h"
+#include "defines.h"
 
 using namespace std::chrono;
 
 
 //#define BUF_SIZE    400
 #define MEMP_NUM_NETCONN 8
-#define ADDRESS_MEMORY 0x08038500
+
 
 //CircularBuffer<int, BUF_SIZE> buf;
 //uint32_t bytes_written = 0;
@@ -140,8 +141,7 @@ typedef struct{
 //     int8_t MainBuffer[sizeMainBuffer];
 // }structBuff;
 
-int8_t onOffLed()                                             // function for check
-{
+int8_t onOffLed(){                                             // function for check
     DigitalOut led3(LED3);
     for(int i=0; i<100; ++i) {
         led3 = !led3;
@@ -151,21 +151,69 @@ int8_t onOffLed()                                             // function for ch
 }
 
 void call_changeInfoFlashThread(){
-    ButtonClass *btnChangeFlashInfo = new ButtonClass(PG_3, PullUp);
+    ButtonClass *btnChangeFlashInfo = new ButtonClass(BTN_CHANGE_FLASH_INFO_PIN, BTN_CHANGE_FLASH_INFO_MODE);
     WriteReadFlash *workWithFlash = new WriteReadFlash();
         char buf[14]="99.33.4.222"; //для отладки
         char buf2[14];  //для отладки
+        
+    typedef struct{
+        char ip[14];
+        char mask[14];
+        char gateway[14];
+    }stest_flash;
+
+    stest_flash sTest_flash2;
+    strcpy(sTest_flash2.ip, "100.200.4.177");
+    strcpy(sTest_flash2.mask, "255.255.255.0");
+    strcpy(sTest_flash2.gateway, "192.168.4.1");
+
+    char separator[2] = ";";
+    int32_t len_MSV = strlen(sTest_flash2.ip) + strlen(sTest_flash2.mask) + strlen(sTest_flash2.gateway) + 3*strlen(separator);
+        printf("len_MSV = %d\n",len_MSV);
+    char *TempMSV= new char[len_MSV];
+                int32_t pos=0;
+                memcpy(&TempMSV[pos], (char*)&sTest_flash2.ip, strlen(sTest_flash2.ip));
+                    pos+=strlen(sTest_flash2.ip);
+                memcpy(&TempMSV[pos], (char*)&separator[0], strlen(separator));
+                    pos+=strlen(separator);
+
+                memcpy(&TempMSV[pos], (char*)&sTest_flash2.mask, strlen(sTest_flash2.mask));
+                    pos+=strlen(sTest_flash2.mask);
+
+                    memcpy(&TempMSV[pos], (char*)&separator[0], strlen(separator));
+                    pos+=strlen(separator);
+
+                memcpy(&TempMSV[pos], (char*)&sTest_flash2.gateway, strlen(sTest_flash2.gateway));
+                    pos+=strlen(sTest_flash2.gateway);
+
+                    memcpy(&TempMSV[pos], (char*)&separator[0], strlen(separator));
+                    pos+=strlen(separator);
+                
+        //         printf("TempMSV s = %s\n",TempMSV);   //для отладки
+        // for(int i=0; i<strlen(TempMSV); ++i){
+        //     //printf("TempMSV[%d] d = %d\n",i, TempMSV[i]);
+        //     printf("TempMSV[%d] c = %c\n",i, TempMSV[i]);
+        // }
     while(1){
         if(btnChangeFlashInfo->check_onPressed_btn()==0){
-                    printf("\n 4-call_changeInfoFlashThread() \n");  //для отладки
-            workWithFlash->flash_write_data(&buf[0], ADDRESS_MEMORY);
-                    workWithFlash->flash.read(buf2, ADDRESS_MEMORY, strlen("120.111.4.222"));  //для отладки
-                    printf("buf2 s = %s\n",buf2);   //для отладки
+                printf("\n 4-call_changeInfoFlashThread() \n");  //для отладки
+            //workWithFlash->flash_write_data(&buf[0], ADDRESS_MEMORY);
+            workWithFlash->flash_write_data(&TempMSV[0], ADDRESS_MEMORY_DEVELOPER, len_MSV); // запись заводских настроек
+                    // workWithFlash->flash.read(buf2, ADDRESS_MEMORY, strlen("120.111.4.222"));  //для отладки
+                    // printf("buf2 s = %s\n",buf2);   //для отладки
+         // workWithFlash->flash.read(&TempMSV2[0], ADDRESS_MEMORY_DEVELOPER, len_MSV);  //для отладки
+                //printf("TempMSV2 s = %s\n",TempMSV2);   //для отладки
+                        
+                        //workWithFlash->flash_write_data(&TempMSV2[0], ADDRESS_MEMORY_USER, len_MSV);
+                        //workWithFlash->flash.read(&TempMSV3[0], ADDRESS_MEMORY_USER, len_MSV);  //для отладки
+                        //printf("TempMSV3 s = %s\n",TempMSV3);   //для отладки
+            workWithFlash->get_copy_flash_userSpace();
         }
     }
 
-    delete btnChangeFlashInfo;
+    delete[] TempMSV;
     delete workWithFlash;
+    delete btnChangeFlashInfo;
 }
 
 void call_shutdownThread(){
@@ -180,8 +228,7 @@ void call_shutdownThread(){
     }
 }
 
-void drdyINHandlerRise()                                        //set flag after interrupt drdy
-{
+void drdyINHandlerRise(){                                        //set flag after interrupt drdy
     eventFlags.set(DRDY_IN_FLAG);
 }
 
@@ -1195,90 +1242,6 @@ void call_getCommandPortThread(CreatePort *port){
 
     }
 }
-/*
-int32_t flash_write_data(char *page_buffer, uint32_t address)
-{
-    flash.init();
-
-    const uint32_t page_size = flash.get_page_size();
-        printf("page_size =  %u\n", page_size);  fflush(stdout);
-    //char *page_buffer = new char[page_size];
-            //memset(page_buffer, 0, sizeof(char) * page_size);
-            // page_buffer[0]=125; //for test
-            // page_buffer[1]=100; //for test
-            // page_buffer[2]=50; //for test
-
-            //page_buffer[0]='A'; //for test
-            //page_buffer[1]='B'; //for test
-            //page_buffer[2]='C'; //for test
-
-            //char page_buffer2[]="192.168.4.177"; //for test
-
-    uint32_t addr = address;
-    uint32_t next_sector = addr + flash.get_sector_size(addr);
-    bool sector_erased = false;
-    size_t pages_flashed = 0;
-    uint32_t percent_done = 0;
-    //while (true) {
-        // Erase this page if it hasn't been erased
-        if (!sector_erased) {
-            int32_t resultEraseFlash = flash.erase(addr, flash.get_sector_size(addr));
-                //printf("resultEraseFlash = %d\n", resultEraseFlash);
-            //if(resultEraseFlash < 0){ return -1;}//так делать не надо  
-            sector_erased = true;
-        }
-
-        // Program page
-        int32_t resultWriteFlash= flash.program(page_buffer, addr, page_size);
-        //if(resultWriteFlash < 0){ return -2;}
-            //flash.program(page_buffer2, addr, page_size);
-
-        addr += page_size;
-        if (addr >= next_sector) {
-            next_sector = addr + flash.get_sector_size(addr);
-            sector_erased = false;
-        }
-            printf("Flashed 100%%\r\n");
-    flash.deinit();
-
-    return 0;
-    /*example for to use
-        //main
-        char buf[14]="120.111.4.222";
-        int32_t res = flash_write_data(&buf[0], ADDRESS_MEMORY);  //0x08038500  //средствами mbed os
-        printf("res = %d\n",res);
-        //char buf2[strlen("120.111.4.222")+1]="";
-        //char* buf2="";
-        char buf2[14];
-        flash.read(buf2, ADDRESS_MEMORY, strlen("120.111.4.222"));
-            printf("buf2 s = %s\n",buf2);
-        for(int i=0; i<strlen("120.111.4.222"); ++i){
-            printf("buf2[%d] d = %d\n",i, buf2[i]);
-            printf("buf2[%d] c = %c\n",i, buf2[i]);
-        }
-
-
-        char tt = flash_read_2(ADDRESS_MEMORY);// 2ой способ
-            printf("tt = %u\n",tt);
-        char tt1 = flash_read_2(ADDRESS_MEMORY);
-            printf("tt1 = %u\n",tt1);
-
-        char testBuff[14]="";
-        testBuff[0]=flash_read_2(ADDRESS_MEMORY);
-        testBuff[1]=flash_read_2(ADDRESS_MEMORY+1);
-        testBuff[2]=flash_read_2(0x08038502);
-        testBuff[3]=flash_read_2(0x08038503);
-            printf("testBuff = %s\n",testBuff);
-*/
-//}
-
-//int FlashIAP::read(void *buffer, uint32_t addr, uint32_t size) //1-ый способ чтения средствами: mbed os, FlashAPI; 
-
-uint32_t flash_read_2(uint32_t address) {  //2-ый способ чтения flash; 
-    return (*(__IO uint32_t*) address);
-}
-
-
 
 int main()
 {
