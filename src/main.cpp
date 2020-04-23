@@ -1243,10 +1243,29 @@ void call_getCommandPortThread(CreatePort *port){
 
     }
 }
+//================================================================================
+class myComp{
+    public:
+        Thread myThread;
 
+        void print(){
+            while(1){
+                printf("Hello ARM\n");
+            }
+            
+        }
+        void myStart(){
+            myThread.start(callback(this, &myComp::print));
+        }
+
+};
+//================================================================================
 int main()
 {
         printf("\n======== 1-start ======================\n");  fflush(stdout);
+
+        myComp Comp;
+        Comp.myStart();
 
             // check mypin object is initialized and connected to a pin
     // if(btn_in.is_connected()) {

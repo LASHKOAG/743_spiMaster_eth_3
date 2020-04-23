@@ -233,11 +233,11 @@ typedef struct
 typedef struct 
 {
 	uint32_t id;				//автоикремент
-	char[12] serial_number; 	//заводской номер устройства (строка)
-	char[12] manufacture_date;	//дата изготовления (строка);
-	char[128] manufacturer; 	//завод изготовитель (строка)
-	char[12] ver_mbed_os;       // mbed os version (строка);
-	char[12] ver_firmware;  	//  (строка);
+	char serial_number[12]; 	//заводской номер устройства (строка)
+	char manufacture_date[12];	//дата изготовления (строка);
+	char manufacturer[128]; 	//завод изготовитель (строка)
+	char ver_mbed_os[12];       // mbed os version (строка);
+	char ver_firmware[12];  	//  (строка);
 
 	// dev_lib_version;
 	// uint16_t interface_version;
@@ -249,21 +249,21 @@ typedef struct
 //++added  CMD_SET_IP							1002/1003
 typedef struct 
 {
-	char[16] ip;
-	char[16] netmask;
-	char[16] gateway;
-	char[16] port;
+	char ip[16];
+	char netmask[16];
+	char gateway[16];
+	char port[16];
 }tcp_set_ip;
 //------------------------------------------------------------------
 //added  CALLBACK_CALIBRATION_INFO		1005	//информация о поверке
 //информация о поверке
 typedef struct {
 	uint32_t id; 						// № stm 
-	char[12] serial_number;        		//заводской номер устройства (строка);
-	char[12] verification_date;  		//дата поверки/калибровки (строка);
-	char[12] verification_end;  		//дата окончания поверки/калибровки (строка);
-	char[32] certificate_number;  		// номер сертификата;
-	char[128] organization_certificate	//организация, выдавшая сертификат
+	char serial_number[12];        		//заводской номер устройства (строка);
+	char verification_date[12];  		//дата поверки/калибровки (строка);
+	char verification_end[12];  		//дата окончания поверки/калибровки (строка);
+	char certificate_number[32];  		// номер сертификата;
+	char organization_certificate[128];	//организация, выдавшая сертификат
 }tcp_calibration_info;
 
 //------------------------------------------------------------------
