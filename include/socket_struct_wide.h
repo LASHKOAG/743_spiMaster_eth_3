@@ -49,6 +49,9 @@
 #define CMD_HAL_DEL_DSA_TASK				42	//������� ������ DSA
 #define CMD_HAL_START_TS_TASK				43  //��������� ��������� ����� ���������� �������
 #define CMD_HAL_STOP_TS_TASK				44  //���������� ��������� ����� ���������� �������
+#define CMD_HAL_GET_DESC_2					1000 //descriptor_2  //общая информация об изделии
+#define CMD_SET_IP							1002
+#define CMD_CALIBRATION_INFO				1004  //информация о поверке
 //------------------------------------------------------------------
 //�������� ��������� �� ��������� �������������
 #define CALLBACK_LOG_MESSAGE			114		//��������� �� ������� (������ ����������������)
@@ -73,6 +76,9 @@
 #define CALLBACK_TS_BEGIN				153		//������ ������ �������
 #define CALLBACK_TS_BUFFER				154		//����� �������
 #define CALLBACK_TS_END					155		//����� ������ �������
+#define CALLBACK_HAL_DESC_2				1001	//descriptor_2  //общая информация об изделии
+#define CALLBACK_SET_IP					1003
+#define CALLBACK_CALIBRATION_INFO		1005	//информация о поверке
 //------------------------------------------------------------------
 //��������������� ����������� HAL
 #ifndef CHECK_EC
@@ -221,6 +227,45 @@ typedef struct
 	uint32_t len_dev_name;
 	char* dev_name;
 }tcp_hal_desc_t;
+//------------------------------------------------------------------
+//++added  CMD_HAL_GET_DESC_2					1000/1001
+//общая информация об изделии
+typedef struct 
+{
+	uint32_t id;				//автоикремент
+	char[12] serial_number; 	//заводской номер устройства (строка)
+	char[12] manufacture_date;	//дата изготовления (строка);
+	char[128] manufacturer; 	//завод изготовитель (строка)
+	char[12] ver_mbed_os;       // mbed os version (строка);
+	char[12] ver_firmware;  	//  (строка);
+
+	// dev_lib_version;
+	// uint16_t interface_version;
+	// uint16_t server_version;
+	// uint32_t len_dev_name;
+	// char* dev_name;
+}tcp_hal_desc_t2;
+//------------------------------------------------------------------
+//++added  CMD_SET_IP							1002/1003
+typedef struct 
+{
+	char[16] ip;
+	char[16] netmask;
+	char[16] gateway;
+	char[16] port;
+}tcp_set_ip;
+//------------------------------------------------------------------
+//added  CALLBACK_CALIBRATION_INFO		1005	//информация о поверке
+//информация о поверке
+typedef struct {
+	uint32_t id; 						// № stm 
+	char[12] serial_number;        		//заводской номер устройства (строка);
+	char[12] verification_date;  		//дата поверки/калибровки (строка);
+	char[12] verification_end;  		//дата окончания поверки/калибровки (строка);
+	char[32] certificate_number;  		// номер сертификата;
+	char[128] organization_certificate	//организация, выдавшая сертификат
+}tcp_calibration_info;
+
 //------------------------------------------------------------------
 //��������� ��������� ������������� �������
 typedef struct
