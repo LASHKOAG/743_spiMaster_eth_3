@@ -1163,47 +1163,6 @@ void dispatcher(CreatePort* port, char* buf, int len){
 //}
 }
 
-void parser_incoming_buffer_from_port(char* buf, int len){
-    // union ULI{
-    //     unsigned int UI;
-    //     char Z[4];
-    //     unsigned short US;
-    // }UnionLI;
-
-    // UnionLI.Z[0]=buf[0];
-    // UnionLI.Z[1]=buf[1];
-    // UnionLI.Z[2]=buf[2];
-    // UnionLI.Z[3]=buf[3];
-
-    // unsigned int uCommand= UnionLI.UI;
-    // printf("uCommand = %u \n", uCommand);
-
-    // unsigned int a = ((buf[0]-'0')*1000 + (buf[1]-'0')*100 +(buf[2]-'0')*10 +(buf[3]-'0'));
-    // printf("u a = %u \n", a);
-
-    //     printf("foo parser_incoming_buffer_from_port \n");
-    //     printf("char* buf[0] = %d \n", buf[0]);
-    if (!buf) return;
-    //как минимум 2 по 4 байта (команда и длина)
-    if (len < 8) return;
-    tcp_packet_t packet;
-    memset(&packet, 0x00, sizeof(tcp_packet_t));
-    memcpy((char*)&packet.command, &buf[0], sizeof(packet.command));
-    //memcpy((char*)&packet.command, &a, sizeof(packet.command));
-    memcpy((char*)&packet.length, &buf[sizeof(packet.command)], sizeof(packet.length));
-    if ((len-8) > 0){
-        packet.buff = new char[len-8];
-        memcpy(&packet.buff[0], &buf[sizeof(packet.command)+sizeof(packet.length)], len-8);
-    }
-        printf("parser packet.command = %u \n", packet.command);
-        printf("parser packet.command = %d \n", packet.command);
-        //printf("parser packet.command = %u \n", &packet.command);
-        printf("=========================== \n");
-    //QueueTasks.push(packet.command); //добавляем packet.command в очередь выполнения
-    //dispatcher2(QueueTasks, packet);
-}
-
-
 void call_getCommandPortThread(CreatePort *port){
         printf("foo getCommandPortT\n");
     string strRecv_msv;
@@ -1243,29 +1202,10 @@ void call_getCommandPortThread(CreatePort *port){
 
     }
 }
-//================================================================================
-class myComp{
-    public:
-        Thread myThread;
 
-        void print(){
-            while(1){
-                printf("Hello ARM\n");
-            }
-            
-        }
-        void myStart(){
-            myThread.start(callback(this, &myComp::print));
-        }
-
-};
-//================================================================================
 int main()
 {
         printf("\n======== 1-start ======================\n");  fflush(stdout);
-
-        myComp Comp;
-        Comp.myStart();
 
             // check mypin object is initialized and connected to a pin
     // if(btn_in.is_connected()) {
@@ -1314,6 +1254,8 @@ int main()
                 getCommandPortThread.start(callback(call_getCommandPortThread, PortConnect));   //get command from general port
                 timeSignalPortThread.start(callback(call_timeSignalPortThread, PortConnect));   //send time Signal in ethernet port to client
                 shutdownThread.start(callback(call_shutdownThread));
+
+                
                 
                 // if(flag_cmd_check_answer){
                 //     printf("flag_cmd_check_answer\n");
@@ -1357,6 +1299,27 @@ int main()
     //delete PortConnect;
 }
 
+//================================================================================
+// class myComp{
+//     public:
+//         Thread myThread;
+
+//         void print(){
+//             while(1){
+//                 printf("Hello ARM\n");
+//             }
+            
+//         }
+//         void myStart(){
+//             myThread.start(callback(this, &myComp::print));
+//         }
+        
+//         void myStop(){
+//             myThread.terminate();
+//         }
+
+// };
+//================================================================================
 /*=========test button press==========================
 InterruptIn button1(PG_2);
 volatile bool button1_pressed = false; // Used in the main loop
